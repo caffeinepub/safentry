@@ -1,9 +1,18 @@
-import { BarChart3, Building2, LogOut, TrendingUp, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  BarChart3,
+  Building2,
+  Calendar,
+  LogOut,
+  Medal,
+  TrendingUp,
+  Users,
+} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { Screen } from "../App";
 import EmployeeManager from "../components/EmployeeManager";
 import VisitorList from "../components/VisitorList";
+import WeeklyVisitorChart from "../components/WeeklyVisitorChart";
 import { backend } from "../lib/backendSingleton";
 
 interface Props {
@@ -24,12 +33,20 @@ interface Company {
 interface Stats {
   totalVisitors: bigint;
   activeVisitorsToday: bigint;
+  totalVisitorsToday: bigint;
+}
+
+interface Visitor {
+  entryTime: bigint;
+  [key: string]: unknown;
 }
 
 export default function CompanyDashboard({ onNavigate }: Props) {
   const [tab, setTab] = useState<Tab>("visitors");
   const [company, setCompany] = useState<Company | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [topPersons, setTopPersons] = useState<[string, bigint][]>([]);
+  const [chartVisitors, setChartVisitors] = useState<Visitor[]>([]);
 
   useEffect(() => {
     const data = sessionStorage.getItem("safentry_company");
@@ -40,14 +57,30 @@ export default function CompanyDashboard({ onNavigate }: Props) {
     setCompany(JSON.parse(data) as Company);
   }, [onNavigate]);
 
+  const loadStats = useCallback((c: Company) => {
+    Promise.all([
+      backend
+        .getCompanyStatsAsCompany(c.loginCode)
+        .then((s) => {
+          if (s) setStats(s as Stats);
+        })
+        .catch(() => toast.error("İstatistikler yüklenemedi")),
+      backend
+        .getTopVisitedPersonsAsCompany(c.loginCode, BigInt(5))
+        .then((r) => setTopPersons(r as [string, bigint][]))
+        .catch(() => {}),
+      backend
+        .getVisitorsAsCompany(c.loginCode)
+        .then((r) => setChartVisitors(r as unknown as Visitor[]))
+        .catch(() => {}),
+    ]);
+  }, []);
+
   useEffect(() => {
     if (company && tab === "stats") {
-      backend
-        .getCompanyStats(company.companyId)
-        .then(setStats)
-        .catch(() => toast.error("İstatistikler yüklenemedi"));
+      loadStats(company);
     }
-  }, [company, tab]);
+  }, [company, tab, loadStats]);
 
   const logout = () => {
     sessionStorage.removeItem("safentry_company");
@@ -111,24 +144,29 @@ export default function CompanyDashboard({ onNavigate }: Props) {
 
       <main className="flex-1 overflow-auto">
         {tab === "visitors" && (
-          <VisitorList companyId={company.companyId} canCheckout={false} />
+          <VisitorList
+            companyId={company.companyId}
+            canCheckout={false}
+            loginCode={company.loginCode}
+          />
         )}
         {tab === "employees" && (
           <EmployeeManager companyId={company.companyId} />
         )}
         {tab === "stats" && (
-          <div className="p-6 max-w-2xl">
+          <div className="p-6 max-w-2xl space-y-6">
             {!stats ? (
               <div
                 data-ocid="company_dash.stats.loading_state"
-                className="grid grid-cols-2 gap-4"
+                className="grid grid-cols-2 sm:grid-cols-3 gap-4"
               >
+                <div className="h-28 bg-muted rounded-2xl animate-pulse" />
                 <div className="h-28 bg-muted rounded-2xl animate-pulse" />
                 <div className="h-28 bg-muted rounded-2xl animate-pulse" />
               </div>
             ) : (
-              <div data-ocid="company_dash.stats.section" className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+              <div data-ocid="company_dash.stats.section" className="space-y-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <StatCard
                     label="Toplam Ziyaretçi"
                     value={String(stats.totalVisitors)}
@@ -141,7 +179,47 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                     icon={<TrendingUp className="w-5 h-5" />}
                     color="emerald"
                   />
+                  <StatCard
+                    label="Bugün Toplam"
+                    value={String(stats.totalVisitorsToday)}
+                    icon={<Calendar className="w-5 h-5" />}
+                    color="blue"
+                  />
                 </div>
+
+                <div data-ocid="company_dash.weekly_chart.section">
+                  <WeeklyVisitorChart visitors={chartVisitors} />
+                </div>
+
+                {topPersons.length > 0 && (
+                  <div className="bg-white border border-border rounded-2xl p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Medal className="w-4 h-4 text-amber-500" />
+                      <h3 className="text-sm font-semibold text-foreground">
+                        En Çok Ziyaret Edilen Kişiler
+                      </h3>
+                    </div>
+                    <div className="space-y-2.5">
+                      {topPersons.map(([name, count], i) => (
+                        <div
+                          key={name}
+                          data-ocid={`company_dash.top_person.item.${i + 1}`}
+                          className="flex items-center gap-3"
+                        >
+                          <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
+                            {i + 1}
+                          </span>
+                          <span className="flex-1 text-sm text-foreground truncate">
+                            {name}
+                          </span>
+                          <span className="text-sm font-semibold text-primary">
+                            {String(count)} ziyaret
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -190,21 +268,34 @@ function StatCard({
   label: string;
   value: string;
   icon: React.ReactNode;
-  color: "primary" | "emerald";
+  color: "primary" | "emerald" | "blue";
 }) {
-  const isPrimary = color === "primary";
+  const colorMap = {
+    primary: {
+      card: "bg-primary/5 border-primary/20",
+      icon: "bg-primary/10 text-primary",
+      value: "text-primary",
+    },
+    emerald: {
+      card: "bg-emerald-50 border-emerald-200",
+      icon: "bg-emerald-100 text-emerald-700",
+      value: "text-emerald-800",
+    },
+    blue: {
+      card: "bg-blue-50 border-blue-200",
+      icon: "bg-blue-100 text-blue-700",
+      value: "text-blue-800",
+    },
+  };
+  const c = colorMap[color];
   return (
-    <div
-      className={`rounded-2xl border p-5 ${isPrimary ? "bg-primary/5 border-primary/20" : "bg-emerald-50 border-emerald-200"}`}
-    >
+    <div className={`rounded-2xl border p-5 ${c.card}`}>
       <div
-        className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${isPrimary ? "bg-primary/10 text-primary" : "bg-emerald-100 text-emerald-700"}`}
+        className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${c.icon}`}
       >
         {icon}
       </div>
-      <div
-        className={`text-3xl font-display font-bold ${isPrimary ? "text-primary" : "text-emerald-800"}`}
-      >
+      <div className={`text-3xl font-display font-bold ${c.value}`}>
         {value}
       </div>
       <div className="text-sm text-muted-foreground mt-1">{label}</div>

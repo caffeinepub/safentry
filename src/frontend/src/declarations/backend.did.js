@@ -33,6 +33,7 @@ export const Employee = IDL.Record({
 export const CompanyStats = IDL.Record({
   'activeVisitorsToday' : IDL.Nat,
   'totalVisitors' : IDL.Nat,
+  'totalVisitorsToday' : IDL.Nat,
 });
 export const Company = IDL.Record({
   'loginCode' : IDL.Text,
@@ -59,11 +60,15 @@ export const Visitor = IDL.Record({
   'companyId' : IDL.Text,
 });
 export const VerifyDocumentResult = IDL.Record({
+  'exitTime' : IDL.Opt(Time),
+  'entryTime' : Time,
+  'visitingPerson' : IDL.Text,
   'name' : IDL.Text,
   'surname' : IDL.Text,
   'visitorId' : IDL.Text,
   'companyName' : IDL.Text,
   'visitPurpose' : IDL.Text,
+  'phone' : IDL.Text,
 });
 
 export const idlService = IDL.Service({
@@ -79,9 +84,24 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getCompanyStats' : IDL.Func([IDL.Text], [CompanyStats], ['query']),
+  'getCompanyStatsAsCompany' : IDL.Func(
+      [IDL.Text],
+      [IDL.Opt(CompanyStats)],
+      ['query'],
+    ),
   'getMyCompanies' : IDL.Func(
       [IDL.Text],
       [IDL.Vec(IDL.Tuple(Company, EmployeeRole))],
+      ['query'],
+    ),
+  'getTopVisitedPersons' : IDL.Func(
+      [IDL.Text, IDL.Nat],
+      [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+      ['query'],
+    ),
+  'getTopVisitedPersonsAsCompany' : IDL.Func(
+      [IDL.Text, IDL.Nat],
+      [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
       ['query'],
     ),
   'getUserProfile' : IDL.Func(
@@ -95,6 +115,7 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getVisitors' : IDL.Func([IDL.Text], [IDL.Vec(Visitor)], ['query']),
+  'getVisitorsAsCompany' : IDL.Func([IDL.Text], [IDL.Vec(Visitor)], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'loginCompany' : IDL.Func([IDL.Text], [IDL.Opt(Company)], ['query']),
   'loginEmployee' : IDL.Func([IDL.Text], [IDL.Opt(Employee)], ['query']),
@@ -157,6 +178,7 @@ export const idlFactory = ({ IDL }) => {
   const CompanyStats = IDL.Record({
     'activeVisitorsToday' : IDL.Nat,
     'totalVisitors' : IDL.Nat,
+    'totalVisitorsToday' : IDL.Nat,
   });
   const Company = IDL.Record({
     'loginCode' : IDL.Text,
@@ -183,11 +205,15 @@ export const idlFactory = ({ IDL }) => {
     'companyId' : IDL.Text,
   });
   const VerifyDocumentResult = IDL.Record({
+    'exitTime' : IDL.Opt(Time),
+    'entryTime' : Time,
+    'visitingPerson' : IDL.Text,
     'name' : IDL.Text,
     'surname' : IDL.Text,
     'visitorId' : IDL.Text,
     'companyName' : IDL.Text,
     'visitPurpose' : IDL.Text,
+    'phone' : IDL.Text,
   });
   
   return IDL.Service({
@@ -207,9 +233,24 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getCompanyStats' : IDL.Func([IDL.Text], [CompanyStats], ['query']),
+    'getCompanyStatsAsCompany' : IDL.Func(
+        [IDL.Text],
+        [IDL.Opt(CompanyStats)],
+        ['query'],
+      ),
     'getMyCompanies' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(IDL.Tuple(Company, EmployeeRole))],
+        ['query'],
+      ),
+    'getTopVisitedPersons' : IDL.Func(
+        [IDL.Text, IDL.Nat],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
+        ['query'],
+      ),
+    'getTopVisitedPersonsAsCompany' : IDL.Func(
+        [IDL.Text, IDL.Nat],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
         ['query'],
       ),
     'getUserProfile' : IDL.Func(
@@ -223,6 +264,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getVisitors' : IDL.Func([IDL.Text], [IDL.Vec(Visitor)], ['query']),
+    'getVisitorsAsCompany' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(Visitor)],
+        ['query'],
+      ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'loginCompany' : IDL.Func([IDL.Text], [IDL.Opt(Company)], ['query']),
     'loginEmployee' : IDL.Func([IDL.Text], [IDL.Opt(Employee)], ['query']),

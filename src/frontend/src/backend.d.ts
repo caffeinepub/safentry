@@ -18,11 +18,15 @@ export interface Company {
 }
 export type Time = bigint;
 export interface VerifyDocumentResult {
+    exitTime?: Time;
+    entryTime: Time;
+    visitingPerson: string;
     name: string;
     surname: string;
     visitorId: string;
     companyName: string;
     visitPurpose: string;
+    phone: string;
 }
 export interface Employee {
     name: string;
@@ -53,6 +57,7 @@ export interface UserProfile {
 export interface CompanyStats {
     activeVisitorsToday: bigint;
     totalVisitors: bigint;
+    totalVisitorsToday: bigint;
 }
 export enum EmployeeRole {
     owner = "owner",
@@ -75,10 +80,14 @@ export interface backendInterface {
         employee: Employee;
     }>>;
     getCompanyStats(companyId: string): Promise<CompanyStats>;
+    getCompanyStatsAsCompany(loginCode: string): Promise<CompanyStats | null>;
     getMyCompanies(employeeId: string): Promise<Array<[Company, EmployeeRole]>>;
+    getTopVisitedPersons(companyId: string, limit: bigint): Promise<Array<[string, bigint]>>;
+    getTopVisitedPersonsAsCompany(loginCode: string, limit: bigint): Promise<Array<[string, bigint]>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getVisitorById(visitorId: string, companyId: string): Promise<Visitor | null>;
     getVisitors(companyId: string): Promise<Array<Visitor>>;
+    getVisitorsAsCompany(loginCode: string): Promise<Array<Visitor>>;
     isCallerAdmin(): Promise<boolean>;
     loginCompany(loginCode: string): Promise<Company | null>;
     loginEmployee(employeeId: string): Promise<Employee | null>;

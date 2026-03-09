@@ -1,5 +1,5 @@
-import { Clock, FileText, Phone, Printer, User, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Clock, FileText, LogOut, Phone, Printer, User, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { backend } from "../lib/backendSingleton";
 import QRCodeDocument from "./QRCodeDocument";
@@ -24,22 +24,24 @@ interface Props {
   visitorId: string;
   companyId: string;
   onClose: () => void;
+  canCheckout?: boolean;
+  onCheckoutDone?: () => void;
 }
 
 export default function VisitorDetail({
   visitorId,
   companyId,
   onClose,
+  canCheckout,
+  onCheckoutDone,
 }: Props) {
   const [visitor, setVisitor] = useState<Visitor | null>(null);
   const [loading, setLoading] = useState(true);
+  const [checkingOut, setCheckingOut] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  useEffect(() => {
-    dialogRef.current?.showModal();
-  }, []);
-
-  useEffect(() => {
+  const loadVisitor = useCallback(() => {
+    setLoading(true);
     backend
       .getVisitorById(visitorId, companyId)
       .then((v) => {
@@ -50,11 +52,33 @@ export default function VisitorDetail({
       .finally(() => setLoading(false));
   }, [visitorId, companyId]);
 
+  useEffect(() => {
+    dialogRef.current?.showModal();
+  }, []);
+
+  useEffect(() => {
+    loadVisitor();
+  }, [loadVisitor]);
+
   const fmt = (ts: bigint) =>
     new Date(Number(ts / 1000000n)).toLocaleString("tr-TR");
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleCheckout = async () => {
+    setCheckingOut(true);
+    try {
+      await backend.checkoutVisitor(visitorId, companyId);
+      toast.success("Çıkış işlemi tamamlandı");
+      onCheckoutDone?.();
+      loadVisitor();
+    } catch {
+      toast.error("Çıkış işlemi başarısız");
+    } finally {
+      setCheckingOut(false);
+    }
   };
 
   const handleDialogClick = (e: React.MouseEvent<HTMLDialogElement>) => {
@@ -94,6 +118,18 @@ export default function VisitorDetail({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {canCheckout && visitor && !visitor.exitTime && (
+              <button
+                type="button"
+                data-ocid="visitor_detail.checkout.button"
+                onClick={handleCheckout}
+                disabled={checkingOut}
+                className="flex items-center gap-1.5 bg-destructive text-destructive-foreground text-xs font-medium px-3 py-2 rounded-lg hover:bg-destructive/90 transition-colors disabled:opacity-50"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                {checkingOut ? "İşleniyor..." : "Çıkış Yap"}
+              </button>
+            )}
             <button
               type="button"
               data-ocid="visitor_detail.print.button"

@@ -3,7 +3,6 @@ import Set "mo:core/Set";
 import Array "mo:core/Array";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
-import List "mo:core/List";
 import Iter "mo:core/Iter";
 import Order "mo:core/Order";
 import Principal "mo:core/Principal";
@@ -73,6 +72,7 @@ actor {
   type CompanyStats = {
     totalVisitors : Nat;
     activeVisitorsToday : Nat;
+    totalVisitorsToday : Nat;
   };
 
   type VerifyDocumentResult = {
@@ -80,7 +80,11 @@ actor {
     name : Text;
     surname : Text;
     visitPurpose : Text;
+    visitingPerson : Text;
+    phone : Text;
     companyName : Text;
+    entryTime : Time.Time;
+    exitTime : ?Time.Time;
   };
 
   // Persistent storage
@@ -140,6 +144,14 @@ actor {
 
   func getEmployeeIdFromCaller(caller : Principal) : ?Text {
     principalToEmployeeId.get(caller);
+  };
+
+  // Helper: check if a timestamp is from today (UTC)
+  func isToday(ts : Time.Time) : Bool {
+    let now = Time.now();
+    let dayNs : Int = 86_400_000_000_000; // 1 day in nanoseconds
+    let startOfToday = now - (now % dayNs);
+    ts >= startOfToday and ts < startOfToday + dayNs;
   };
 
   // User Profile Functions
@@ -211,18 +223,15 @@ actor {
   };
 
   public shared ({ caller }) func addEmployeeToCompany(companyId : Text, employeeId : Text, role : EmployeeRole) : async () {
-    // Get caller's employeeId
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
     };
 
-    // Check if caller is owner or authorized in the company
     if (not isOwnerOrAuthorized(companyId, callerEmployeeId)) {
       Runtime.trap("Unauthorized: Only owner or authorized can add employees");
     };
 
-    // Verify company and employee exist
     switch (companies.get(companyId), employees.get(employeeId)) {
       case (?_, ?_) {
         let key = getCombinedKey(companyId, employeeId);
@@ -233,13 +242,11 @@ actor {
   };
 
   public query ({ caller }) func getMyCompanies(employeeId : Text) : async [(Company, EmployeeRole)] {
-    // Get caller's employeeId
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
     };
 
-    // Verify caller is requesting their own companies
     if (callerEmployeeId != employeeId) {
       Runtime.trap("Unauthorized: Can only view your own companies");
     };
@@ -263,13 +270,11 @@ actor {
   };
 
   public shared ({ caller }) func setEmployeeRole(companyId : Text, targetEmployeeId : Text, role : EmployeeRole) : async () {
-    // Get caller's employeeId
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
     };
 
-    // Only owner can set roles
     if (not isOwner(companyId, callerEmployeeId)) {
       Runtime.trap("Unauthorized: Only owner can set employee roles");
     };
@@ -282,13 +287,11 @@ actor {
   };
 
   public shared ({ caller }) func removeEmployeeFromCompany(companyId : Text, targetEmployeeId : Text) : async () {
-    // Get caller's employeeId
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
     };
 
-    // Only owner can remove employees
     if (not isOwner(companyId, callerEmployeeId)) {
       Runtime.trap("Unauthorized: Only owner can remove employees");
     };
@@ -301,13 +304,11 @@ actor {
   };
 
   public shared ({ caller }) func registerVisitor(companyId : Text, name : Text, surname : Text, tcId : Text, phone : Text, visitingPerson : Text, visitPurpose : Text, signatureData : Text) : async Text {
-    // Get caller's employeeId
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
     };
 
-    // Check if caller has any role in the company (owner, authorized, or registrar can register)
     if (not hasAnyRole(companyId, callerEmployeeId)) {
       Runtime.trap("Unauthorized: You must be an employee of this company to register visitors");
     };
@@ -336,13 +337,11 @@ actor {
   };
 
   public shared ({ caller }) func checkoutVisitor(visitorId : Text, companyId : Text) : async () {
-    // Get caller's employeeId
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
     };
 
-    // Check if caller has any role in the company
     if (not hasAnyRole(companyId, callerEmployeeId)) {
       Runtime.trap("Unauthorized: You must be an employee of this company");
     };
@@ -365,13 +364,11 @@ actor {
   };
 
   public query ({ caller }) func getVisitors(companyId : Text) : async [Visitor] {
-    // Get caller's employeeId
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
     };
 
-    // Check if caller has any role in the company
     if (not hasAnyRole(companyId, callerEmployeeId)) {
       Runtime.trap("Unauthorized: You must be an employee of this company");
     };
@@ -386,13 +383,11 @@ actor {
   };
 
   public query ({ caller }) func getVisitorById(visitorId : Text, companyId : Text) : async ?Visitor {
-    // Get caller's employeeId
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
     };
 
-    // Check if caller has any role in the company
     if (not hasAnyRole(companyId, callerEmployeeId)) {
       Runtime.trap("Unauthorized: You must be an employee of this company");
     };
@@ -409,13 +404,11 @@ actor {
   };
 
   public shared ({ caller }) func updateVisitorSignature(visitorId : Text, companyId : Text, signatureData : Text) : async () {
-    // Get caller's employeeId
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
     };
 
-    // Check if caller has any role in the company
     if (not hasAnyRole(companyId, callerEmployeeId)) {
       Runtime.trap("Unauthorized: You must be an employee of this company");
     };
@@ -451,7 +444,11 @@ actor {
               name = visitor.name;
               surname = visitor.surname;
               visitPurpose = visitor.visitPurpose;
+              visitingPerson = visitor.visitingPerson;
+              phone = visitor.phone;
               companyName;
+              entryTime = visitor.entryTime;
+              exitTime = visitor.exitTime;
             };
           };
           case (null) { null };
@@ -462,13 +459,11 @@ actor {
   };
 
   public query ({ caller }) func getCompanyEmployees(companyId : Text) : async [{ employee : Employee; role : EmployeeRole }] {
-    // Get caller's employeeId
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
     };
 
-    // Check if caller has any role in the company
     if (not hasAnyRole(companyId, callerEmployeeId)) {
       Runtime.trap("Unauthorized: You must be an employee of this company");
     };
@@ -494,26 +489,28 @@ actor {
   };
 
   public query ({ caller }) func getCompanyStats(companyId : Text) : async CompanyStats {
-    // Get caller's employeeId
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
     };
 
-    // Only owner or authorized can view stats
     if (not isOwnerOrAuthorized(companyId, callerEmployeeId)) {
       Runtime.trap("Unauthorized: Only owner or authorized can view company stats");
     };
 
     var totalVisitors = 0;
     var activeVisitorsToday = 0;
+    var totalVisitorsToday = 0;
 
     for ((_, visitor) in visitors.entries()) {
       if (visitor.companyId == companyId) {
         totalVisitors += 1;
-        switch (visitor.exitTime) {
-          case (null) { activeVisitorsToday += 1 };
-          case (_) {};
+        if (isToday(visitor.entryTime)) {
+          totalVisitorsToday += 1;
+          switch (visitor.exitTime) {
+            case (null) { activeVisitorsToday += 1 };
+            case (_) {};
+          };
         };
       };
     };
@@ -521,6 +518,122 @@ actor {
     {
       totalVisitors;
       activeVisitorsToday;
+      totalVisitorsToday;
     };
+  };
+
+  // New functions.
+
+  public query ({ caller }) func getVisitorsAsCompany(loginCode : Text) : async [Visitor] {
+    // Authenticates via loginCode, no employee auth needed
+    let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+
+    var result : [Visitor] = [];
+    for ((_, visitor) in visitors.entries()) {
+      if (visitor.companyId == companyId) {
+        result := result.concat([visitor]);
+      };
+    };
+    result;
+  };
+
+  public query ({ caller }) func getCompanyStatsAsCompany(loginCode : Text) : async ?CompanyStats {
+    // Authenticates via loginCode, no employee auth needed
+    switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?companyId) {
+        ?calculateCompanyStats(companyId);
+      };
+      case (null) { null };
+    };
+  };
+
+  public query ({ caller }) func getTopVisitedPersons(companyId : Text, limit : Nat) : async [(Text, Nat)] {
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (not hasAnyRole(companyId, callerEmployeeId)) {
+      Runtime.trap("Unauthorized: You must be an employee of this company");
+    };
+
+    getTopVisitedPersonsInternal(companyId, limit);
+  };
+
+  public query ({ caller }) func getTopVisitedPersonsAsCompany(loginCode : Text, limit : Nat) : async [(Text, Nat)] {
+    // Authenticates via loginCode, no employee auth needed
+    let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+
+    getTopVisitedPersonsInternal(companyId, limit);
+  };
+
+  // Helper functions for new features
+  func getCompanyIdByLoginCode(loginCode : Text) : ?Text {
+    for ((companyId, company) in companies.entries()) {
+      if (company.loginCode == loginCode) {
+        return ?companyId;
+      };
+    };
+    null;
+  };
+
+  func calculateCompanyStats(companyId : Text) : CompanyStats {
+    var totalVisitors = 0;
+    var activeVisitorsToday = 0;
+    var totalVisitorsToday = 0;
+
+    for ((_, visitor) in visitors.entries()) {
+      if (visitor.companyId == companyId) {
+        totalVisitors += 1;
+        if (isToday(visitor.entryTime)) {
+          totalVisitorsToday += 1;
+          switch (visitor.exitTime) {
+            case (null) { activeVisitorsToday += 1 };
+            case (_) {};
+          };
+        };
+      };
+    };
+
+    {
+      totalVisitors;
+      activeVisitorsToday;
+      totalVisitorsToday;
+    };
+  };
+
+  func getTopVisitedPersonsInternal(companyId : Text, limit : Nat) : [(Text, Nat)] {
+    let personCounts = Map.empty<Text, Nat>();
+
+    for ((_, visitor) in visitors.entries()) {
+      if (visitor.companyId == companyId) {
+        let currentCount = switch (personCounts.get(visitor.visitingPerson)) {
+          case (?count) { count };
+          case (null) { 0 };
+        };
+        personCounts.add(visitor.visitingPerson, currentCount + 1);
+      };
+    };
+
+    let sortedList = personCounts.toArray().sort(
+      func((_, count1), (_, count2)) {
+        if (count1 > count2) { #less } else if (count1 < count2) { #greater } else {
+          #equal;
+        };
+      }
+    );
+
+    let resultSize = if (sortedList.size() < limit) {
+      sortedList.size();
+    } else {
+      limit;
+    };
+    sortedList.sliceToArray(0, resultSize);
   };
 };

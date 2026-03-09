@@ -22,6 +22,7 @@ export interface Company {
 export interface CompanyStats {
   'activeVisitorsToday' : bigint,
   'totalVisitors' : bigint,
+  'totalVisitorsToday' : bigint,
 }
 export interface Employee {
   'name' : string,
@@ -42,11 +43,15 @@ export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
 export interface VerifyDocumentResult {
+  'exitTime' : [] | [Time],
+  'entryTime' : Time,
+  'visitingPerson' : string,
   'name' : string,
   'surname' : string,
   'visitorId' : string,
   'companyName' : string,
   'visitPurpose' : string,
+  'phone' : string,
 }
 export interface Visitor {
   'documentCode' : string,
@@ -78,10 +83,20 @@ export interface _SERVICE {
     Array<{ 'role' : EmployeeRole, 'employee' : Employee }>
   >,
   'getCompanyStats' : ActorMethod<[string], CompanyStats>,
+  'getCompanyStatsAsCompany' : ActorMethod<[string], [] | [CompanyStats]>,
   'getMyCompanies' : ActorMethod<[string], Array<[Company, EmployeeRole]>>,
+  'getTopVisitedPersons' : ActorMethod<
+    [string, bigint],
+    Array<[string, bigint]>
+  >,
+  'getTopVisitedPersonsAsCompany' : ActorMethod<
+    [string, bigint],
+    Array<[string, bigint]>
+  >,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getVisitorById' : ActorMethod<[string, string], [] | [Visitor]>,
   'getVisitors' : ActorMethod<[string], Array<Visitor>>,
+  'getVisitorsAsCompany' : ActorMethod<[string], Array<Visitor>>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'loginCompany' : ActorMethod<[string], [] | [Company]>,
   'loginEmployee' : ActorMethod<[string], [] | [Employee]>,

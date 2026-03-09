@@ -1,4 +1,13 @@
-import { ArrowLeft, CheckCircle2, Search, Shield, XCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Clock,
+  Phone,
+  Search,
+  Shield,
+  User,
+  XCircle,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Screen } from "../App";
@@ -14,6 +23,10 @@ interface VerifyResult {
   surname: string;
   companyName: string;
   visitPurpose: string;
+  visitingPerson: string;
+  phone: string;
+  entryTime: bigint;
+  exitTime?: bigint;
 }
 
 export default function DocumentVerify({ onNavigate }: Props) {
@@ -31,13 +44,16 @@ export default function DocumentVerify({ onNavigate }: Props) {
     setResult(null);
     try {
       const res = await backend.verifyDocument(code.trim());
-      setResult(res ? res : "notfound");
+      setResult(res ? (res as VerifyResult) : "notfound");
     } catch {
       toast.error("Sorgulama sırasında hata oluştu");
     } finally {
       setLoading(false);
     }
   };
+
+  const fmt = (ts: bigint) =>
+    new Date(Number(ts / 1000000n)).toLocaleString("tr-TR");
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -133,22 +149,61 @@ export default function DocumentVerify({ onNavigate }: Props) {
               data-ocid="doc_verify.success_state"
               className="mt-4 bg-emerald-50 border border-emerald-200 rounded-2xl p-5 animate-fade-in"
             >
-              <div className="flex items-center gap-2.5 mb-4">
-                <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-                <span className="font-display font-semibold text-emerald-800">
-                  Belge Doğrulandı
-                </span>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                  <span className="font-display font-semibold text-emerald-800">
+                    Belge Doğrulandı
+                  </span>
+                </div>
+                {!result.exitTime ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    Aktif Ziyaret
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                    Tamamlandı
+                  </span>
+                )}
               </div>
               <div className="space-y-3">
                 <ResultRow
+                  icon={<User className="w-3.5 h-3.5" />}
                   label="Ad Soyad"
                   value={`${result.name} ${result.surname}`}
                 />
                 <ResultRow
+                  icon={<User className="w-3.5 h-3.5" />}
                   label="Ziyaret Edilen Firma"
                   value={result.companyName}
                 />
-                <ResultRow label="Ziyaret Amacı" value={result.visitPurpose} />
+                <ResultRow
+                  icon={<User className="w-3.5 h-3.5" />}
+                  label="Kime Geldi"
+                  value={result.visitingPerson}
+                />
+                <ResultRow
+                  icon={<User className="w-3.5 h-3.5" />}
+                  label="Ziyaret Amacı"
+                  value={result.visitPurpose}
+                />
+                <ResultRow
+                  icon={<Phone className="w-3.5 h-3.5" />}
+                  label="Telefon"
+                  value={result.phone}
+                />
+                <ResultRow
+                  icon={<Clock className="w-3.5 h-3.5" />}
+                  label="Giriş Saati"
+                  value={fmt(result.entryTime)}
+                />
+                <ResultRow
+                  icon={<Clock className="w-3.5 h-3.5" />}
+                  label="Çıkış Saati"
+                  value={result.exitTime ? fmt(result.exitTime) : "İçeride"}
+                />
               </div>
             </div>
           )}
@@ -158,13 +213,24 @@ export default function DocumentVerify({ onNavigate }: Props) {
   );
 }
 
-function ResultRow({ label, value }: { label: string; value: string }) {
+function ResultRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
-    <div>
-      <p className="text-xs font-medium text-emerald-700 uppercase tracking-wide">
-        {label}
-      </p>
-      <p className="text-sm font-medium text-foreground mt-0.5">{value}</p>
+    <div className="flex items-start gap-2">
+      <span className="text-emerald-600 mt-0.5 flex-shrink-0">{icon}</span>
+      <div>
+        <p className="text-xs font-medium text-emerald-700 uppercase tracking-wide">
+          {label}
+        </p>
+        <p className="text-sm font-medium text-foreground mt-0.5">{value}</p>
+      </div>
     </div>
   );
 }

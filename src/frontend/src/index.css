@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Fonts ─────────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("/assets/fonts/BricolageGrotesque[opsz,wdth,wght].woff2")
+    format("woff2");
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "General Sans";
+  src: url("/assets/fonts/GeneralSans-Variable.woff2") format("woff2");
+  font-weight: 200 700;
+  font-display: swap;
+}
+
+/* ─── Design Tokens ──────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    /* Backgrounds */
+    --background: 0.97 0.006 252;
+    --foreground: 0.14 0.025 260;
+
+    /* Cards & surfaces */
+    --card: 1 0 0;
+    --card-foreground: 0.14 0.025 260;
+    --popover: 1 0 0;
+    --popover-foreground: 0.14 0.025 260;
+
+    /* Primary: deep teal-navy */
+    --primary: 0.32 0.12 222;
+    --primary-foreground: 0.98 0.005 222;
+
+    /* Secondary */
+    --secondary: 0.93 0.015 252;
+    --secondary-foreground: 0.3 0.06 260;
+
+    /* Muted */
+    --muted: 0.94 0.01 252;
+    --muted-foreground: 0.52 0.03 260;
+
+    /* Accent: bright teal */
+    --accent: 0.62 0.18 205;
+    --accent-foreground: 1 0 0;
+
+    /* Destructive */
+    --destructive: 0.52 0.22 25;
+    --destructive-foreground: 0.98 0.005 25;
+
+    /* Borders & inputs */
+    --border: 0.88 0.014 252;
+    --input: 0.88 0.014 252;
+    --ring: 0.32 0.12 222;
+
+    /* Charts */
+    --chart-1: 0.62 0.18 205;
+    --chart-2: 0.55 0.16 150;
+    --chart-3: 0.72 0.16 62;
+    --chart-4: 0.52 0.22 25;
+    --chart-5: 0.32 0.12 222;
+
+    /* Sidebar */
+    --sidebar: 0.17 0.03 265;
+    --sidebar-foreground: 0.92 0.01 252;
+    --sidebar-primary: 0.62 0.18 205;
+    --sidebar-primary-foreground: 0.14 0.025 260;
+    --sidebar-accent: 0.25 0.04 265;
+    --sidebar-accent-foreground: 0.92 0.01 252;
+    --sidebar-border: 0.25 0.04 265;
+    --sidebar-ring: 0.62 0.18 205;
+
+    /* Shape */
+    --radius: 0.625rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "General Sans", system-ui, sans-serif;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* ─── Typography ─────────────────────────────────────────────────────────── */
+.font-display {
+  font-family: "Bricolage Grotesque", system-ui, sans-serif;
+}
+
+/* ─── Print ──────────────────────────────────────────────────────────────── */
+@media print {
+  body > * {
+    display: none;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* ─── Signature canvas ───────────────────────────────────────────────────── */
+.signature-canvas {
+  touch-action: none;
+  cursor: crosshair;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(var(--border));
+  border-radius: 9999px;
+}

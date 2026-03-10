@@ -23,6 +23,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Screen } from "../App";
 import EmployeeManager from "../components/EmployeeManager";
+import HourlyDensityChart from "../components/HourlyDensityChart";
+import PurposeDistributionChart from "../components/PurposeDistributionChart";
 import VisitorList from "../components/VisitorList";
 import VisitorRegisterForm from "../components/VisitorRegisterForm";
 import WeeklyVisitorChart from "../components/WeeklyVisitorChart";
@@ -89,6 +91,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
   const [company, setCompany] = useState<{
     companyId: string;
     companyName: string;
+    loginCode?: string;
   } | null>(null);
   const [role, setRole] = useState<string>("registrar");
   const [stats, setStats] = useState<{
@@ -98,6 +101,8 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
   } | null>(null);
   const [topPersons, setTopPersons] = useState<[string, bigint][]>([]);
   const [chartVisitors, setChartVisitors] = useState<Visitor[]>([]);
+  const [purposeDist, setPurposeDist] = useState<[string, bigint][]>([]);
+  const [totalPersonnel, setTotalPersonnel] = useState(0);
   const [todayMyVisitors, setTodayMyVisitors] = useState(0);
   const [allMyVisitorsCount, setAllMyVisitorsCount] = useState(0);
 
@@ -320,7 +325,17 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
         .catch(() => {}),
       backend
         .getVisitors(c.companyId)
-        .then((r) => setChartVisitors(r as unknown as Visitor[]))
+        .then((r) => {
+          const visitors = r as unknown as Visitor[];
+          setChartVisitors(visitors);
+          // Compute purpose distribution from visitors
+          const purposeMap = new Map<string, bigint>();
+          for (const v of visitors) {
+            const purpose = v.visitPurpose || "Belirtilmemiş";
+            purposeMap.set(purpose, (purposeMap.get(purpose) ?? 0n) + 1n);
+          }
+          setPurposeDist(Array.from(purposeMap.entries()));
+        })
         .catch(() => {}),
     ]);
   }, []);
@@ -330,6 +345,15 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
       loadStats(company);
     }
   }, [company, tab, loadStats]);
+
+  // Load total personnel count for owner
+  useEffect(() => {
+    if (!company) return;
+    backend
+      .getCompanyEmployees(company.companyId)
+      .then((emps) => setTotalPersonnel((emps as unknown[]).length))
+      .catch(() => {});
+  }, [company]);
 
   // Load invites when on davetler tab
   const loadInvites = useCallback(async (companyId: string) => {
@@ -552,6 +576,23 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
       .slice(0, 5);
   })();
 
+  // Compute average visit duration
+  const avgDurationLabel = (() => {
+    const completed = chartVisitors.filter(
+      (v) => v.exitTime != null && v.exitTime !== undefined,
+    );
+    if (completed.length === 0) return "—";
+    const totalMs = completed.reduce((acc, v) => {
+      const exit = v.exitTime as bigint;
+      return acc + Number((exit - v.entryTime) / 1000000n);
+    }, 0);
+    const avgMin = Math.round(totalMs / completed.length / 60000);
+    if (avgMin < 60) return `${avgMin} dk`;
+    const h = Math.floor(avgMin / 60);
+    const m = avgMin % 60;
+    return m > 0 ? `${h}s ${m}dk` : `${h} saat`;
+  })();
+
   const inviteLink = (code: string) =>
     `${window.location.origin}${window.location.pathname}?invite=${code}`;
 
@@ -640,6 +681,17 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             Toplam: <span className="font-bold">{allMyVisitorsCount}</span>
           </span>
         </div>
+        {canManageEmployees && (
+          <div
+            data-ocid="employee_dash.personnel_count.card"
+            className="flex items-center gap-1.5"
+          >
+            <Users className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+            <span className="text-xs font-medium">
+              Personel: <span className="font-bold">{totalPersonnel}</span>
+            </span>
+          </div>
+        )}
       </div>
 
       <nav className="border-b border-border bg-white">
@@ -1037,11 +1089,27 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     icon={<Calendar className="w-5 h-5" />}
                     color="blue"
                   />
+                  <StatCard
+                    label="Ort. Ziyaret Süresi"
+                    value={avgDurationLabel}
+                    icon={<Clock className="w-5 h-5" />}
+                    color="blue"
+                  />
                 </div>
 
                 <div data-ocid="employee_dash.weekly_chart.section">
                   <WeeklyVisitorChart visitors={chartVisitors} />
                 </div>
+
+                <div data-ocid="employee_dash.hourly_chart.section">
+                  <HourlyDensityChart visitors={chartVisitors} />
+                </div>
+
+                {purposeDist.length > 0 && (
+                  <div data-ocid="employee_dash.purpose_chart.section">
+                    <PurposeDistributionChart data={purposeDist} />
+                  </div>
+                )}
 
                 {topPersons.length > 0 && (
                   <div className="bg-white border border-border rounded-2xl p-5">

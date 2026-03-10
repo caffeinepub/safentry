@@ -10,6 +10,11 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface BlacklistEntry {
+  'tcId' : string,
+  'addedAt' : Time,
+  'reason' : string,
+}
 export interface Company {
   'loginCode' : string,
   'name' : string,
@@ -33,6 +38,24 @@ export interface Employee {
 export type EmployeeRole = { 'owner' : null } |
   { 'authorized' : null } |
   { 'registrar' : null };
+export interface PreRegistration {
+  'status' : PreRegistrationStatus,
+  'visitingPerson' : string,
+  'createdAt' : Time,
+  'createdBy' : string,
+  'tcId' : [] | [string],
+  'visitorId' : [] | [string],
+  'visitorName' : [] | [string],
+  'inviteCode' : string,
+  'visitPurpose' : string,
+  'phone' : [] | [string],
+  'visitorSurname' : [] | [string],
+  'companyId' : string,
+}
+export type PreRegistrationStatus = { 'cancelled' : null } |
+  { 'submitted' : null } |
+  { 'pending' : null } |
+  { 'finalized' : null };
 export type Time = bigint;
 export interface UserProfile {
   'name' : string,
@@ -75,17 +98,40 @@ export interface _SERVICE {
     [string, string, EmployeeRole],
     undefined
   >,
+  'addVisitorBlacklist' : ActorMethod<[string, string, string], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'cancelInvite' : ActorMethod<[string, string], undefined>,
   'checkoutVisitor' : ActorMethod<[string, string], undefined>,
+  /**
+   * / PRE-REGISTRATION SYSTEM WITH PROPER AUTHORIZATION
+   */
+  'createInvite' : ActorMethod<[string, string, string], string>,
+  'finalizeInvite' : ActorMethod<
+    [string, string, string, [] | [string], [] | [string], boolean],
+    string
+  >,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getCompanyBlacklist' : ActorMethod<[string], Array<BlacklistEntry>>,
   'getCompanyEmployees' : ActorMethod<
     [string],
     Array<{ 'role' : EmployeeRole, 'employee' : Employee }>
   >,
+  'getCompanyInvites' : ActorMethod<[string], Array<PreRegistration>>,
   'getCompanyLogo' : ActorMethod<[string], [] | [string]>,
   'getCompanyStats' : ActorMethod<[string], CompanyStats>,
   'getCompanyStatsAsCompany' : ActorMethod<[string], [] | [CompanyStats]>,
+  'getInvitePublic' : ActorMethod<
+    [string],
+    [] | [
+      {
+        'status' : PreRegistrationStatus,
+        'visitingPerson' : string,
+        'companyName' : string,
+        'visitPurpose' : string,
+      }
+    ]
+  >,
   'getMyCompanies' : ActorMethod<[string], Array<[Company, EmployeeRole]>>,
   'getPurposeDistributionAsCompany' : ActorMethod<
     [string],
@@ -106,6 +152,7 @@ export interface _SERVICE {
   'getVisitorsAsCompany' : ActorMethod<[string], Array<Visitor>>,
   'getVisitorsByPerson' : ActorMethod<[string, string], Array<Visitor>>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'isVisitorBlacklisted' : ActorMethod<[string, string], boolean>,
   'loginCompany' : ActorMethod<[string], [] | [Company]>,
   'loginEmployee' : ActorMethod<[string], [] | [Employee]>,
   'registerCompany' : ActorMethod<
@@ -128,10 +175,15 @@ export interface _SERVICE {
     string
   >,
   'removeEmployeeFromCompany' : ActorMethod<[string, string], undefined>,
+  'removeVisitorBlacklist' : ActorMethod<[string, string], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'setCompanyLogo' : ActorMethod<[string, string], undefined>,
   'setEmployeePin' : ActorMethod<[string, string], undefined>,
   'setEmployeeRole' : ActorMethod<[string, string, EmployeeRole], undefined>,
+  'submitInviteInfo' : ActorMethod<
+    [string, string, string, string, string],
+    undefined
+  >,
   'updateCompanyProfile' : ActorMethod<
     [string, string, string, string, string],
     undefined

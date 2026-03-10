@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Ban } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { backend } from "../lib/backendSingleton";
@@ -20,6 +20,15 @@ const PURPOSE_OPTIONS = [
   "Diğer",
 ];
 
+const VISITOR_TYPES = [
+  "Misafir",
+  "Müteahhit",
+  "Kurye",
+  "Servis",
+  "Danışman",
+  "Denetçi",
+];
+
 export default function VisitorRegisterForm({
   companyId,
   employeeId: _employeeId,
@@ -30,11 +39,14 @@ export default function VisitorRegisterForm({
   const [phone, setPhone] = useState("");
   const [vehiclePlate, setVehiclePlate] = useState("");
   const [visitingPerson, setVisitingPerson] = useState("");
+  const [visitorType, setVisitorType] = useState("");
   const [visitPurposeType, setVisitPurposeType] = useState("");
   const [visitPurposeCustom, setVisitPurposeCustom] = useState("");
+  const [ndaAccepted, setNdaAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [savedVisitorId, setSavedVisitorId] = useState<string | null>(null);
   const [recurringCount, setRecurringCount] = useState<number | null>(null);
+  const [isBlacklisted, setIsBlacklisted] = useState(false);
   const recurringTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -53,21 +65,27 @@ export default function VisitorRegisterForm({
     ctx.lineCap = "round";
   }, []);
 
-  // Recurring visitor check — debounced when tcId hits exactly 11 chars
+  // Recurring visitor + blacklist check — debounced when tcId hits exactly 11 chars
   useEffect(() => {
     if (recurringTimer.current) clearTimeout(recurringTimer.current);
 
     if (tcId.length !== 11) {
       setRecurringCount(null);
+      setIsBlacklisted(false);
       return;
     }
 
     recurringTimer.current = setTimeout(async () => {
       try {
-        const count = await backend.getVisitorCountByTcId(companyId, tcId);
+        const [count, blacklisted] = await Promise.all([
+          backend.getVisitorCountByTcId(companyId, tcId),
+          backend.isVisitorBlacklisted(companyId, tcId),
+        ]);
         setRecurringCount(Number(count));
+        setIsBlacklisted(Boolean(blacklisted));
       } catch {
         setRecurringCount(null);
+        setIsBlacklisted(false);
       }
     }, 400);
 
@@ -142,9 +160,24 @@ export default function VisitorRegisterForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const visitPurpose =
+    if (isBlacklisted) return;
+    if (!ndaAccepted) {
+      toast.error("Gizlilik sözleşmesi onaylanmalıdır");
+      return;
+    }
+    const purposeBase =
       visitPurposeType === "Diğer" ? visitPurposeCustom : visitPurposeType;
-    if (!name || !surname || !phone || !visitingPerson || !visitPurposeType) {
+    const visitPurpose = visitorType
+      ? `[${visitorType}] ${purposeBase}`
+      : purposeBase;
+    if (
+      !name ||
+      !surname ||
+      !phone ||
+      !visitingPerson ||
+      !visitPurposeType ||
+      !visitorType
+    ) {
       toast.error("Lütfen zorunlu alanları doldurun");
       return;
     }
@@ -182,11 +215,14 @@ export default function VisitorRegisterForm({
     setPhone("");
     setVehiclePlate("");
     setVisitingPerson("");
+    setVisitorType("");
     setVisitPurposeType("");
     setVisitPurposeCustom("");
+    setNdaAccepted(false);
     setSavedVisitorId(null);
     setHasSig(false);
     setRecurringCount(null);
+    setIsBlacklisted(false);
     clearSignature();
   };
 
@@ -254,9 +290,24 @@ export default function VisitorRegisterForm({
             onChange={(e) => setTcId(e.target.value)}
             placeholder="TC Kimlik No"
             maxLength={11}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+            className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 font-mono ${
+              isBlacklisted
+                ? "border-red-400 focus:ring-red-400 bg-red-50"
+                : "border-slate-300 focus:ring-emerald-500"
+            }`}
           />
-          {recurringCount !== null && recurringCount > 0 && (
+          {isBlacklisted && (
+            <div
+              data-ocid="visitor_form.blacklisted.error_state"
+              className="mt-1.5 flex items-start gap-2 bg-red-50 border border-red-300 rounded-lg px-3 py-2"
+            >
+              <Ban className="w-3.5 h-3.5 text-red-600 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-red-800 leading-relaxed font-medium">
+                Bu ziyaretçi kara listede kayıtlıdır. Kayıt yapılamaz.
+              </p>
+            </div>
+          )}
+          {!isBlacklisted && recurringCount !== null && recurringCount > 0 && (
             <div
               data-ocid="visitor_form.recurring.section"
               className="mt-1.5 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
@@ -323,6 +374,31 @@ export default function VisitorRegisterForm({
         </div>
       </div>
 
+      {/* Visitor Type */}
+      <div>
+        <label
+          htmlFor="vf-visitor-type"
+          className="block text-xs font-medium text-slate-600 mb-1"
+        >
+          Ziyaretçi Tipi *
+        </label>
+        <select
+          id="vf-visitor-type"
+          data-ocid="visitor_register.visitor_type_select"
+          value={visitorType}
+          onChange={(e) => setVisitorType(e.target.value)}
+          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+        >
+          <option value="">Seçiniz...</option>
+          {VISITOR_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Visit Purpose */}
       <div>
         <label
           htmlFor="vf-purpose"
@@ -390,10 +466,29 @@ export default function VisitorRegisterForm({
         )}
       </div>
 
+      {/* NDA Checkbox */}
+      <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+        <input
+          type="checkbox"
+          id="vf-nda"
+          data-ocid="visitor_register.nda_checkbox"
+          checked={ndaAccepted}
+          onChange={(e) => setNdaAccepted(e.target.checked)}
+          className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-emerald-600 cursor-pointer flex-shrink-0"
+        />
+        <label
+          htmlFor="vf-nda"
+          className="text-xs text-slate-600 leading-relaxed cursor-pointer"
+        >
+          Ziyaretçi, şirket gizlilik ve güvenlik kurallarını okuduğunu ve kabul
+          ettiğini onaylamaktadır.
+        </label>
+      </div>
+
       <button
-        data-ocid="visitor_form.submit.button"
+        data-ocid="visitor_register.submit_button"
         type="submit"
-        disabled={loading}
+        disabled={loading || isBlacklisted || !ndaAccepted}
         className="w-full bg-emerald-700 text-white py-3 rounded-lg font-medium hover:bg-emerald-800 transition-colors disabled:opacity-50"
       >
         {loading ? "Kaydediliyor..." : "Ziyaretçiyi Kaydet"}

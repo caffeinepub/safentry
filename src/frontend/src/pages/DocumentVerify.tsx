@@ -3,12 +3,14 @@ import {
   CheckCircle2,
   Clock,
   Phone,
+  QrCode,
   Search,
   Shield,
   User,
+  X,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Screen } from "../App";
 import { backend } from "../lib/backendSingleton";
@@ -34,8 +36,144 @@ export default function DocumentVerify({ onNavigate }: Props) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<VerifyResult | null | "notfound">(null);
 
-  const handleVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // QR scanner state
+  const [qrOverlayOpen, setQrOverlayOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const detectedRef = useRef(false);
+
+  const stopCamera = useCallback(() => {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (streamRef.current) {
+      for (const track of streamRef.current.getTracks()) track.stop();
+      streamRef.current = null;
+    }
+  }, []);
+
+  const closeQrOverlay = useCallback(() => {
+    stopCamera();
+    detectedRef.current = false;
+    setQrOverlayOpen(false);
+  }, [stopCamera]);
+
+  const scanFrame = useCallback(
+    (
+      jsQR: (
+        data: Uint8ClampedArray,
+        width: number,
+        height: number,
+      ) => { data: string } | null,
+    ) => {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      if (!video || !canvas || detectedRef.current) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const qrResult = jsQR(
+          imageData.data,
+          imageData.width,
+          imageData.height,
+        );
+        if (qrResult?.data) {
+          detectedRef.current = true;
+          setCode(qrResult.data);
+          closeQrOverlay();
+          // Auto-submit after state update
+          setTimeout(() => {
+            document.getElementById("dv-submit-btn")?.click();
+          }, 100);
+          return;
+        }
+      }
+
+      rafRef.current = requestAnimationFrame(() => scanFrame(jsQR));
+    },
+    [closeQrOverlay],
+  );
+
+  const openQrOverlay = useCallback(async () => {
+    detectedRef.current = false;
+    setQrOverlayOpen(true);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      streamRef.current = stream;
+
+      // Wait for video element to mount
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const video = videoRef.current;
+      if (!video) {
+        stopCamera();
+        return;
+      }
+      video.srcObject = stream;
+      await video.play();
+
+      // Load jsQR from CDN if not already loaded
+      const getJsQR = ():
+        | ((
+            data: Uint8ClampedArray,
+            width: number,
+            height: number,
+          ) => { data: string } | null)
+        | null => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (window as any).jsQR ?? null;
+      };
+
+      if (!getJsQR()) {
+        await new Promise<void>((resolve, reject) => {
+          const existing = document.getElementById("jsqr-cdn");
+          if (existing) {
+            resolve();
+            return;
+          }
+          const script = document.createElement("script");
+          script.id = "jsqr-cdn";
+          script.src =
+            "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js";
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("jsQR yüklenemedi"));
+          document.head.appendChild(script);
+        });
+      }
+
+      const jsQR = getJsQR();
+      if (!jsQR) throw new Error("jsQR bulunamadı");
+      rafRef.current = requestAnimationFrame(() => scanFrame(jsQR));
+    } catch (err) {
+      stopCamera();
+      setQrOverlayOpen(false);
+      const msg =
+        err instanceof DOMException && err.name === "NotAllowedError"
+          ? "Kamera erişimine izin verilmedi"
+          : "Kamera açılamadı";
+      toast.error(msg);
+    }
+  }, [scanFrame, stopCamera]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
+
+  const handleVerify = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!code.trim()) {
       toast.error("Lütfen belge kodunu girin");
       return;
@@ -117,7 +255,20 @@ export default function DocumentVerify({ onNavigate }: Props) {
                 className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono bg-white text-foreground placeholder:text-muted-foreground"
               />
             </div>
+
+            {/* QR Scan button */}
             <button
+              type="button"
+              data-ocid="doc_verify.qr_scan.button"
+              onClick={openQrOverlay}
+              className="w-full py-2.5 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 text-sm border border-border bg-muted hover:bg-muted/70 text-foreground"
+            >
+              <QrCode className="w-4 h-4" />
+              Kamera ile Tara
+            </button>
+
+            <button
+              id="dv-submit-btn"
               data-ocid="doc_verify.search.button"
               type="submit"
               disabled={loading}
@@ -209,6 +360,71 @@ export default function DocumentVerify({ onNavigate }: Props) {
           )}
         </div>
       </div>
+
+      {/* QR Overlay */}
+      {qrOverlayOpen && (
+        <div
+          data-ocid="doc_verify.qr_overlay.panel"
+          className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center"
+        >
+          {/* Cancel button */}
+          <button
+            type="button"
+            data-ocid="doc_verify.qr_overlay.close_button"
+            onClick={closeQrOverlay}
+            className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {/* Title */}
+          <div className="absolute top-4 left-0 right-0 text-center">
+            <p className="text-white text-sm font-medium opacity-80">
+              QR kodu çerçeveye hizalayın
+            </p>
+          </div>
+
+          {/* Video */}
+          <video
+            ref={videoRef}
+            className="absolute inset-0 w-full h-full object-cover"
+            playsInline
+            muted
+          />
+
+          {/* Hidden canvas for decoding */}
+          <canvas ref={canvasRef} className="hidden" />
+
+          {/* Targeting frame overlay */}
+          <div className="relative z-10 pointer-events-none">
+            <div className="w-64 h-64 relative">
+              {/* Dark corners */}
+              <div
+                className="absolute inset-0 rounded-2xl"
+                style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)" }}
+              />
+              {/* Corner markers */}
+              <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-lg" />
+              <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-lg" />
+              <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-lg" />
+              <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-lg" />
+              {/* Scan line animation */}
+              <div
+                className="absolute left-2 right-2 h-0.5 bg-white/60"
+                style={{ animation: "qr-scan 2s linear infinite", top: "20%" }}
+              />
+            </div>
+          </div>
+
+          <style>{`
+            @keyframes qr-scan {
+              0% { top: 20%; }
+              50% { top: 75%; }
+              100% { top: 20%; }
+            }
+          `}</style>
+        </div>
+      )}
     </div>
   );
 }

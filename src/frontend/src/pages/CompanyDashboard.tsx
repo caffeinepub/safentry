@@ -1,9 +1,11 @@
 import {
+  Ban,
   BarChart3,
   Building2,
   Calendar,
   Check,
   Clipboard,
+  Clock,
   ImagePlus,
   Loader2,
   LogOut,
@@ -18,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Screen } from "../App";
 import EmployeeManager from "../components/EmployeeManager";
+import HourlyDensityChart from "../components/HourlyDensityChart";
 import PurposeDistributionChart from "../components/PurposeDistributionChart";
 import VisitorList from "../components/VisitorList";
 import WeeklyVisitorChart from "../components/WeeklyVisitorChart";
@@ -46,10 +49,17 @@ interface Stats {
 
 interface Visitor {
   entryTime: bigint;
+  exitTime?: bigint;
   tcId: string;
   name: string;
   surname: string;
   [key: string]: unknown;
+}
+
+interface BlacklistEntry {
+  tcId: string;
+  reason: string;
+  addedAt: bigint;
 }
 
 export default function CompanyDashboard({ onNavigate }: Props) {
@@ -73,6 +83,13 @@ export default function CompanyDashboard({ onNavigate }: Props) {
   const [editContact, setEditContact] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
 
+  // Blacklist
+  const [blacklist, setBlacklist] = useState<BlacklistEntry[]>([]);
+  const [blacklistLoading, setBlacklistLoading] = useState(false);
+  const [blTcId, setBlTcId] = useState("");
+  const [blReason, setBlReason] = useState("");
+  const [blAdding, setBlAdding] = useState(false);
+
   useEffect(() => {
     const data = sessionStorage.getItem("safentry_company");
     if (!data) {
@@ -81,7 +98,6 @@ export default function CompanyDashboard({ onNavigate }: Props) {
     }
     const parsed = JSON.parse(data) as Company;
     setCompany(parsed);
-    // Load company logo on mount
     backend
       .getCompanyLogo(parsed.loginCode)
       .then((logo) => {
@@ -92,6 +108,21 @@ export default function CompanyDashboard({ onNavigate }: Props) {
       })
       .catch(() => {});
   }, [onNavigate]);
+
+  const loadBlacklist = useCallback((c: Company) => {
+    setBlacklistLoading(true);
+    backend
+      .getCompanyBlacklist(c.loginCode)
+      .then((list) => setBlacklist(list as BlacklistEntry[]))
+      .catch(() => toast.error("Kara liste yüklenemedi"))
+      .finally(() => setBlacklistLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (company && tab === "info") {
+      loadBlacklist(company);
+    }
+  }, [company, tab, loadBlacklist]);
 
   const loadStats = useCallback((c: Company) => {
     Promise.all([
@@ -211,6 +242,46 @@ export default function CompanyDashboard({ onNavigate }: Props) {
     }
   };
 
+  const handleBlacklistAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!company) return;
+    if (blTcId.length !== 11) {
+      toast.error("TC kimlik numarası 11 haneli olmalıdır");
+      return;
+    }
+    if (!blReason.trim()) {
+      toast.error("Engelleme sebebi zorunludur");
+      return;
+    }
+    setBlAdding(true);
+    try {
+      await backend.addVisitorBlacklist(
+        company.companyId,
+        blTcId,
+        blReason.trim(),
+      );
+      toast.success("Kara listeye eklendi");
+      setBlTcId("");
+      setBlReason("");
+      loadBlacklist(company);
+    } catch {
+      toast.error("Eklenemedi");
+    } finally {
+      setBlAdding(false);
+    }
+  };
+
+  const handleBlacklistRemove = async (tcId: string) => {
+    if (!company) return;
+    try {
+      await backend.removeVisitorBlacklist(company.companyId, tcId);
+      toast.success("Kara listeden çıkarıldı");
+      loadBlacklist(company);
+    } catch {
+      toast.error("Çıkarılamadı");
+    }
+  };
+
   if (!company) return null;
 
   // Compute frequent visitors (top 5 with count > 1)
@@ -232,6 +303,23 @@ export default function CompanyDashboard({ onNavigate }: Props) {
       .filter((item) => item.count > 1)
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
+  })();
+
+  // Compute average visit duration
+  const avgDurationLabel = (() => {
+    const completed = chartVisitors.filter(
+      (v) => v.exitTime != null && v.exitTime !== undefined,
+    );
+    if (completed.length === 0) return "—";
+    const totalMs = completed.reduce((acc, v) => {
+      const exit = v.exitTime as bigint;
+      return acc + Number((exit - v.entryTime) / 1000000n);
+    }, 0);
+    const avgMin = Math.round(totalMs / completed.length / 60000);
+    if (avgMin < 60) return `${avgMin} dk`;
+    const h = Math.floor(avgMin / 60);
+    const m = avgMin % 60;
+    return m > 0 ? `${h}s ${m}dk` : `${h} saat`;
   })();
 
   return (
@@ -326,7 +414,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
               </div>
             ) : (
               <div data-ocid="company_dash.stats.section" className="space-y-6">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <StatCard
                     label="Toplam Ziyaretçi"
                     value={String(stats.totalVisitors)}
@@ -345,10 +433,21 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                     icon={<Calendar className="w-5 h-5" />}
                     color="blue"
                   />
+                  <StatCard
+                    data-ocid="company_dash.avg_duration.card"
+                    label="Ort. Ziyaret Süresi"
+                    value={avgDurationLabel}
+                    icon={<Clock className="w-5 h-5" />}
+                    color="amber"
+                  />
                 </div>
 
                 <div data-ocid="company_dash.weekly_chart.section">
                   <WeeklyVisitorChart visitors={chartVisitors} />
+                </div>
+
+                <div data-ocid="company_dash.hourly_chart.section">
+                  <HourlyDensityChart visitors={chartVisitors} />
                 </div>
 
                 {purposeDist.length > 0 && (
@@ -436,7 +535,6 @@ export default function CompanyDashboard({ onNavigate }: Props) {
               </div>
 
               <div className="flex items-start gap-5">
-                {/* Logo preview */}
                 <div
                   data-ocid="company_dash.logo.card"
                   className="w-20 h-20 rounded-xl border-2 border-dashed border-border flex items-center justify-center overflow-hidden bg-muted/40 flex-shrink-0"
@@ -551,6 +649,109 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                   {copied ? "Kopyalandı" : "Kopyala"}
                 </button>
               </div>
+            </div>
+
+            {/* Blacklist Section */}
+            <div
+              data-ocid="company_dash.blacklist.section"
+              className="bg-white border border-border rounded-2xl p-5"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Ban className="w-4 h-4 text-red-500" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Kara Liste
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Kara listedeki TC kimlik numaraları ziyaretçi kaydı sırasında
+                engellenir.
+              </p>
+
+              {/* Add form */}
+              <form onSubmit={handleBlacklistAdd} className="space-y-2 mb-4">
+                <div className="flex gap-2">
+                  <input
+                    data-ocid="company_dash.blacklist.tc.input"
+                    value={blTcId}
+                    onChange={(e) =>
+                      setBlTcId(e.target.value.replace(/\D/g, "").slice(0, 11))
+                    }
+                    placeholder="TC Kimlik No (11 hane)"
+                    maxLength={11}
+                    className="flex-1 border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white font-mono"
+                  />
+                  <button
+                    type="submit"
+                    data-ocid="company_dash.blacklist.add.button"
+                    disabled={blAdding}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {blAdding ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Ban className="w-3.5 h-3.5" />
+                    )}
+                    Ekle
+                  </button>
+                </div>
+                <input
+                  data-ocid="company_dash.blacklist.reason.input"
+                  value={blReason}
+                  onChange={(e) => setBlReason(e.target.value)}
+                  placeholder="Engelleme sebebi"
+                  className="w-full border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white"
+                />
+              </form>
+
+              {/* List */}
+              {blacklistLoading ? (
+                <div
+                  data-ocid="company_dash.blacklist.loading_state"
+                  className="space-y-2"
+                >
+                  <div className="h-10 bg-muted rounded-xl animate-pulse" />
+                  <div className="h-10 bg-muted rounded-xl animate-pulse" />
+                </div>
+              ) : blacklist.length === 0 ? (
+                <div
+                  data-ocid="company_dash.blacklist.empty_state"
+                  className="text-center py-8 text-muted-foreground"
+                >
+                  <Ban className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                  <p className="text-sm">Kara listede kayıt yok</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {blacklist.map((entry, i) => (
+                    <div
+                      key={entry.tcId}
+                      data-ocid={`company_dash.blacklist.item.${i + 1}`}
+                      className="flex items-start gap-3 p-3 bg-red-50 border border-red-100 rounded-xl"
+                    >
+                      <Ban className="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-mono font-semibold text-red-800">
+                          {entry.tcId}
+                        </p>
+                        {entry.reason && (
+                          <p className="text-xs text-red-600 mt-0.5 truncate">
+                            {entry.reason}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        data-ocid={`company_dash.blacklist.remove.button.${i + 1}`}
+                        onClick={() => handleBlacklistRemove(entry.tcId)}
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
+                        title="Listeden çıkar"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -703,11 +904,13 @@ function StatCard({
   value,
   icon,
   color,
+  "data-ocid": dataOcid,
 }: {
   label: string;
   value: string;
   icon: React.ReactNode;
-  color: "primary" | "emerald" | "blue";
+  color: "primary" | "emerald" | "blue" | "amber";
+  "data-ocid"?: string;
 }) {
   const colorMap = {
     primary: {
@@ -725,10 +928,15 @@ function StatCard({
       icon: "bg-blue-100 text-blue-700",
       value: "text-blue-800",
     },
+    amber: {
+      card: "bg-amber-50 border-amber-200",
+      icon: "bg-amber-100 text-amber-700",
+      value: "text-amber-800",
+    },
   };
   const c = colorMap[color];
   return (
-    <div className={`rounded-2xl border p-5 ${c.card}`}>
+    <div data-ocid={dataOcid} className={`rounded-2xl border p-5 ${c.card}`}>
       <div
         className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${c.icon}`}
       >

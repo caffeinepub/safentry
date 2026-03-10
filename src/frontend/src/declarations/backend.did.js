@@ -24,11 +24,36 @@ export const UserProfile = IDL.Record({
   'employeeId' : IDL.Opt(IDL.Text),
 });
 export const Time = IDL.Int;
+export const BlacklistEntry = IDL.Record({
+  'tcId' : IDL.Text,
+  'addedAt' : Time,
+  'reason' : IDL.Text,
+});
 export const Employee = IDL.Record({
   'name' : IDL.Text,
   'createdAt' : Time,
   'surname' : IDL.Text,
   'employeeId' : IDL.Text,
+});
+export const PreRegistrationStatus = IDL.Variant({
+  'cancelled' : IDL.Null,
+  'submitted' : IDL.Null,
+  'pending' : IDL.Null,
+  'finalized' : IDL.Null,
+});
+export const PreRegistration = IDL.Record({
+  'status' : PreRegistrationStatus,
+  'visitingPerson' : IDL.Text,
+  'createdAt' : Time,
+  'createdBy' : IDL.Text,
+  'tcId' : IDL.Opt(IDL.Text),
+  'visitorId' : IDL.Opt(IDL.Text),
+  'visitorName' : IDL.Opt(IDL.Text),
+  'inviteCode' : IDL.Text,
+  'visitPurpose' : IDL.Text,
+  'phone' : IDL.Opt(IDL.Text),
+  'visitorSurname' : IDL.Opt(IDL.Text),
+  'companyId' : IDL.Text,
 });
 export const CompanyStats = IDL.Record({
   'activeVisitorsToday' : IDL.Nat,
@@ -75,13 +100,38 @@ export const VerifyDocumentResult = IDL.Record({
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'addEmployeeToCompany' : IDL.Func([IDL.Text, IDL.Text, EmployeeRole], [], []),
+  'addVisitorBlacklist' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'cancelInvite' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'checkoutVisitor' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'createInvite' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [IDL.Text], []),
+  'finalizeInvite' : IDL.Func(
+      [
+        IDL.Text,
+        IDL.Text,
+        IDL.Text,
+        IDL.Opt(IDL.Text),
+        IDL.Opt(IDL.Text),
+        IDL.Bool,
+      ],
+      [IDL.Text],
+      [],
+    ),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+  'getCompanyBlacklist' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(BlacklistEntry)],
+      ['query'],
+    ),
   'getCompanyEmployees' : IDL.Func(
       [IDL.Text],
       [IDL.Vec(IDL.Record({ 'role' : EmployeeRole, 'employee' : Employee }))],
+      ['query'],
+    ),
+  'getCompanyInvites' : IDL.Func(
+      [IDL.Text],
+      [IDL.Vec(PreRegistration)],
       ['query'],
     ),
   'getCompanyLogo' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
@@ -89,6 +139,20 @@ export const idlService = IDL.Service({
   'getCompanyStatsAsCompany' : IDL.Func(
       [IDL.Text],
       [IDL.Opt(CompanyStats)],
+      ['query'],
+    ),
+  'getInvitePublic' : IDL.Func(
+      [IDL.Text],
+      [
+        IDL.Opt(
+          IDL.Record({
+            'status' : PreRegistrationStatus,
+            'visitingPerson' : IDL.Text,
+            'companyName' : IDL.Text,
+            'visitPurpose' : IDL.Text,
+          })
+        ),
+      ],
       ['query'],
     ),
   'getMyCompanies' : IDL.Func(
@@ -134,6 +198,11 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'isVisitorBlacklisted' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Bool],
+      ['query'],
+    ),
   'loginCompany' : IDL.Func([IDL.Text], [IDL.Opt(Company)], ['query']),
   'loginEmployee' : IDL.Func([IDL.Text], [IDL.Opt(Employee)], ['query']),
   'registerCompany' : IDL.Func(
@@ -158,10 +227,16 @@ export const idlService = IDL.Service({
       [],
     ),
   'removeEmployeeFromCompany' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'removeVisitorBlacklist' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'setCompanyLogo' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'setEmployeePin' : IDL.Func([IDL.Text, IDL.Text], [], []),
   'setEmployeeRole' : IDL.Func([IDL.Text, IDL.Text, EmployeeRole], [], []),
+  'submitInviteInfo' : IDL.Func(
+      [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+      [],
+      [],
+    ),
   'updateCompanyProfile' : IDL.Func(
       [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
       [],
@@ -195,11 +270,36 @@ export const idlFactory = ({ IDL }) => {
     'employeeId' : IDL.Opt(IDL.Text),
   });
   const Time = IDL.Int;
+  const BlacklistEntry = IDL.Record({
+    'tcId' : IDL.Text,
+    'addedAt' : Time,
+    'reason' : IDL.Text,
+  });
   const Employee = IDL.Record({
     'name' : IDL.Text,
     'createdAt' : Time,
     'surname' : IDL.Text,
     'employeeId' : IDL.Text,
+  });
+  const PreRegistrationStatus = IDL.Variant({
+    'cancelled' : IDL.Null,
+    'submitted' : IDL.Null,
+    'pending' : IDL.Null,
+    'finalized' : IDL.Null,
+  });
+  const PreRegistration = IDL.Record({
+    'status' : PreRegistrationStatus,
+    'visitingPerson' : IDL.Text,
+    'createdAt' : Time,
+    'createdBy' : IDL.Text,
+    'tcId' : IDL.Opt(IDL.Text),
+    'visitorId' : IDL.Opt(IDL.Text),
+    'visitorName' : IDL.Opt(IDL.Text),
+    'inviteCode' : IDL.Text,
+    'visitPurpose' : IDL.Text,
+    'phone' : IDL.Opt(IDL.Text),
+    'visitorSurname' : IDL.Opt(IDL.Text),
+    'companyId' : IDL.Text,
   });
   const CompanyStats = IDL.Record({
     'activeVisitorsToday' : IDL.Nat,
@@ -250,13 +350,38 @@ export const idlFactory = ({ IDL }) => {
         [],
         [],
       ),
+    'addVisitorBlacklist' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'cancelInvite' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'checkoutVisitor' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'createInvite' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [IDL.Text], []),
+    'finalizeInvite' : IDL.Func(
+        [
+          IDL.Text,
+          IDL.Text,
+          IDL.Text,
+          IDL.Opt(IDL.Text),
+          IDL.Opt(IDL.Text),
+          IDL.Bool,
+        ],
+        [IDL.Text],
+        [],
+      ),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+    'getCompanyBlacklist' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(BlacklistEntry)],
+        ['query'],
+      ),
     'getCompanyEmployees' : IDL.Func(
         [IDL.Text],
         [IDL.Vec(IDL.Record({ 'role' : EmployeeRole, 'employee' : Employee }))],
+        ['query'],
+      ),
+    'getCompanyInvites' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(PreRegistration)],
         ['query'],
       ),
     'getCompanyLogo' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
@@ -264,6 +389,20 @@ export const idlFactory = ({ IDL }) => {
     'getCompanyStatsAsCompany' : IDL.Func(
         [IDL.Text],
         [IDL.Opt(CompanyStats)],
+        ['query'],
+      ),
+    'getInvitePublic' : IDL.Func(
+        [IDL.Text],
+        [
+          IDL.Opt(
+            IDL.Record({
+              'status' : PreRegistrationStatus,
+              'visitingPerson' : IDL.Text,
+              'companyName' : IDL.Text,
+              'visitPurpose' : IDL.Text,
+            })
+          ),
+        ],
         ['query'],
       ),
     'getMyCompanies' : IDL.Func(
@@ -313,6 +452,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'isVisitorBlacklisted' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Bool],
+        ['query'],
+      ),
     'loginCompany' : IDL.Func([IDL.Text], [IDL.Opt(Company)], ['query']),
     'loginEmployee' : IDL.Func([IDL.Text], [IDL.Opt(Employee)], ['query']),
     'registerCompany' : IDL.Func(
@@ -337,10 +481,16 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'removeEmployeeFromCompany' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'removeVisitorBlacklist' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'setCompanyLogo' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'setEmployeePin' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'setEmployeeRole' : IDL.Func([IDL.Text, IDL.Text, EmployeeRole], [], []),
+    'submitInviteInfo' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
+        [],
+        [],
+      ),
     'updateCompanyProfile' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text, IDL.Text, IDL.Text],
         [],

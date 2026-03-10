@@ -1,5 +1,6 @@
 import {
   CalendarRange,
+  Clock,
   Download,
   FileText,
   LogOut,
@@ -40,6 +41,14 @@ interface Props {
   canCheckout: boolean;
   /** If provided, use loginCode-based backend call (for company panel) */
   loginCode?: string;
+}
+
+const LONG_VISIT_HOURS = 4;
+
+function isLongVisit(entryTime: bigint): boolean {
+  const durationHours =
+    (Date.now() - Number(entryTime / 1_000_000n)) / (1000 * 60 * 60);
+  return durationHours > LONG_VISIT_HOURS;
 }
 
 export default function VisitorList({
@@ -350,64 +359,74 @@ export default function VisitorList({
 
       {/* Visitor rows */}
       <div className="space-y-2">
-        {filtered.map((v, i) => (
-          <button
-            type="button"
-            key={v.visitorId}
-            data-ocid={`visitor_list.item.${i + 1}`}
-            onClick={() => setDetailVisitorId(v.visitorId)}
-            className="w-full text-left bg-white border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-card transition-all cursor-pointer"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-foreground text-sm">
-                    {v.name} {v.surname}
-                  </span>
-                  {!v.exitTime ? (
-                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs px-2 py-0.5 rounded-full font-medium">
-                      Aktif
+        {filtered.map((v, i) => {
+          const longVisit = !v.exitTime && isLongVisit(v.entryTime);
+          return (
+            <button
+              type="button"
+              key={v.visitorId}
+              data-ocid={`visitor_list.item.${i + 1}`}
+              onClick={() => setDetailVisitorId(v.visitorId)}
+              className="w-full text-left bg-white border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-card transition-all cursor-pointer"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-foreground text-sm">
+                      {v.name} {v.surname}
                     </span>
-                  ) : (
-                    <span className="bg-muted text-muted-foreground text-xs px-2 py-0.5 rounded-full border border-border">
-                      Çıktı
-                    </span>
-                  )}
+                    {!v.exitTime ? (
+                      <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs px-2 py-0.5 rounded-full font-medium">
+                        Aktif
+                      </span>
+                    ) : (
+                      <span className="bg-muted text-muted-foreground text-xs px-2 py-0.5 rounded-full border border-border">
+                        Çıktı
+                      </span>
+                    )}
+                    {longVisit && (
+                      <span className="inline-flex items-center gap-1 bg-orange-50 text-orange-700 border border-orange-200 text-xs px-2 py-0.5 rounded-full font-medium">
+                        <Clock className="w-3 h-3" />
+                        Uzun Süre
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1 truncate">
+                    {v.visitingPerson} ·{" "}
+                    {parseVisitorPurpose(v.visitPurpose).displayPurpose}
+                    {v.vehiclePlate && ` · ${v.vehiclePlate}`}
+                  </div>
+                  <div className="text-xs text-muted-foreground/70 mt-0.5">
+                    Giriş: {fmt(v.entryTime)}
+                    {v.exitTime ? ` · Çıkış: ${fmt(v.exitTime)}` : ""}
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground mt-1 truncate">
-                  {v.visitingPerson} · {v.visitPurpose}
-                  {v.vehiclePlate && ` · ${v.vehiclePlate}`}
-                </div>
-                <div className="text-xs text-muted-foreground/70 mt-0.5">
-                  Giriş: {fmt(v.entryTime)}
-                  {v.exitTime ? ` · Çıkış: ${fmt(v.exitTime)}` : ""}
-                </div>
-              </div>
-              <div className="flex gap-1.5 flex-shrink-0">
-                <button
-                  type="button"
-                  data-ocid={`visitor_list.document.button.${i + 1}`}
-                  onClick={(e) => handleDocumentClick(e, v.visitorId)}
-                  className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                  title="Belge"
-                >
-                  <FileText className="w-4 h-4" />
-                </button>
-                {canCheckout && !v.exitTime && (
+                <div className="flex gap-1.5 flex-shrink-0">
                   <button
                     type="button"
-                    data-ocid={`visitor_list.checkout.button.${i + 1}`}
-                    onClick={(e) => handleCheckout(e, v.visitorId)}
-                    className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                    title="Çıkış Yap"
+                    data-ocid={`visitor_list.document.button.${i + 1}`}
+                    onClick={(e) => handleDocumentClick(e, v.visitorId)}
+                    className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                    title="Belge"
                   >
-                    <LogOut className="w-4 h-4" />
+                    <FileText className="w-4 h-4" />
                   </button>
-                )}
+                  {canCheckout && !v.exitTime && (
+                    <button
+                      type="button"
+                      data-ocid={`visitor_list.checkout.button.${i + 1}`}
+                      onClick={(e) => handleCheckout(e, v.visitorId)}
+                      className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                      title="Çıkış Yap"
+                    >
+                      <LogOut className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
       {/* Detail modal */}
@@ -422,4 +441,20 @@ export default function VisitorList({
       )}
     </div>
   );
+}
+
+function parseVisitorPurpose(visitPurpose: string): {
+  visitorType: string | null;
+  displayPurpose: string;
+} {
+  if (visitPurpose.startsWith("[")) {
+    const end = visitPurpose.indexOf("]");
+    if (end > 0) {
+      return {
+        visitorType: visitPurpose.slice(1, end),
+        displayPurpose: visitPurpose.slice(end + 2).trim(),
+      };
+    }
+  }
+  return { visitorType: null, displayPurpose: visitPurpose };
 }

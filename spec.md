@@ -1,39 +1,29 @@
 # Safentry
 
 ## Current State
-
-Safentry is a multi-tenant visitor entry tracking application with:
-- Company registration/login, personnel registration/login, visitor document inquiry
-- Role-based access (owner, authorized/manager, registrar)
-- Visitor registration with digital signature, PDF with QR code
-- Visitor exit tracking, document verification
-- Statistics (daily counts, top visited persons, 7-day graph, visit reason distribution, frequent visitors)
-- CSV export, date filtering, personnel filter, search (name, phone, TC)
-- Company logo upload, repeat visitor detection
-- Session timeout (30 min inactivity)
-- Personel şirketten çıkarma (`removeEmployeeFromCompany`) already exists in backend
+Safentry is a multi-tenant visitor tracking app. Sürüm 10A implemented: active visitor security screen (güvenlik tab), visitor type dropdown, NDA checkbox. Visitor invite links, badge printout, and personnel summary panel are planned for this release.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Personel şifre değiştirme**: Personnel can change their own password (PIN code stored on backend, verified at login)
-- **Başarısız giriş kilidi**: After 5 failed login attempts, lock the account for 15 minutes (frontend-side tracking with localStorage)
-- **Şirket profil düzenleme**: Company owner can update company name, sector, address, and contact person name
-- **Panel içi bildirim**: When a visitor is registered for a person, show an in-panel notification badge/alert for that person if they are logged in (frontend-only simulated notification using localStorage events)
+- **Ziyaretçi Davet Linki**: Employee creates an invite with visiting person + purpose. System generates a unique invite code. Employee copies the link (e.g. `?invite=CODE`). Visitor opens link, fills in name/surname/TC/phone. Employee sees pending pre-registrations in a new "Davetler" tab. On arrival, employee finalizes (converts to full visitor record) by capturing signature.
+- **Rozet Baskı Çıktısı**: In visitor list/detail, a print badge button generates a print-friendly badge: visitor name, company name, visit purpose, visiting person, entry time, document code as text. Uses `window.print()` with print CSS.
+- **Personel Özet Paneli**: In EmployeeDashboard, a summary card showing: today's visitors registered by this employee, active (not checked out) visitors registered by this employee, this employee's total all-time visitors.
+- Backend: `PreRegistration` type, `createInvite`, `getInvitePublic`, `submitInviteInfo`, `finalizeInvite`, `getCompanyInvites`, `cancelInvite` functions.
+- New frontend page: `InviteForm.tsx` — public page for visitor to fill their data.
 
 ### Modify
-- Personnel panel: add "Şifre Değiştir" option in settings
-- Company panel personnel tab: show "Çıkar" button next to each personnel (already in backend, just needs UI wiring)
-- Company panel: add "Profil Düzenle" option in Bilgiler tab
+- `App.tsx`: Add `inviteForm` screen.
+- `EmployeeDashboard.tsx`: Add Davetler tab, personel özet kartı.
+- `VisitorList.tsx` or `CompanyDashboard.tsx`: Add badge print button.
+- Backend `main.mo`: Add PreRegistration storage and functions.
 
 ### Remove
-- Nothing removed
+- Nothing removed.
 
 ## Implementation Plan
-
-1. **Backend**: Add `updateCompanyProfile(loginCode, name, sector, address, contactPersonName)` function. Add `setEmployeePin(employeeId, pin)` and `verifyEmployeePin(employeeId, pin)` functions. Add `getFailedLoginAttempts` / login attempt tracking. Add `getVisitorsByPerson` helper for notification feature.
-2. **Frontend - Şifre Değiştir**: In personnel panel settings/profile section, add a form to set/change a numeric PIN. Store PIN hash in backend.
-3. **Frontend - Giriş kilidi**: Track failed login attempts in localStorage per employeeId. After 5 failures within 15 min, show lockout message.
-4. **Frontend - Şirket profil düzenleme**: In company Bilgiler tab, add an edit form for company info fields.
-5. **Frontend - Personel çıkarma UI**: Wire existing `removeEmployeeFromCompany` to a "Çıkar" button in the personnel list (already available for owners).
-6. **Frontend - Panel içi bildirim**: When personnel logs in and views their panel, check if they are listed as "visitingPerson" in any active (no exit) visitors today, show a notification banner.
+1. Update `main.mo` with PreRegistration type and invite functions.
+2. Create `InviteForm.tsx` for visitor self-registration.
+3. Update `EmployeeDashboard.tsx` with Davetler tab and summary card.
+4. Add badge print utility in `VisitorList.tsx`.
+5. Update `App.tsx` to route invite screen.

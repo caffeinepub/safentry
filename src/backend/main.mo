@@ -13,9 +13,7 @@ import Iter "mo:core/Iter";
 import Option "mo:core/Option";
 import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
-import Migration "migration";
 
-(with migration = Migration.run)
 actor {
   // Initialize access control
   let accessControlState = AccessControl.initState();
@@ -91,6 +89,40 @@ actor {
     exitTime : ?Time.Time;
   };
 
+  type BlacklistEntry = {
+    tcId : Text;
+    reason : Text;
+    addedAt : Time.Time;
+  };
+
+  type PreRegistrationStatus = {
+    #pending;
+    #submitted;
+    #finalized;
+    #cancelled;
+  };
+
+  public type PreRegistration = {
+    inviteCode : Text;
+    companyId : Text;
+    createdBy : Text;
+    visitingPerson : Text;
+    visitPurpose : Text;
+    visitorName : ?Text;
+    visitorSurname : ?Text;
+    tcId : ?Text;
+    phone : ?Text;
+    createdAt : Time.Time;
+    status : PreRegistrationStatus;
+    visitorId : ?Text;
+  };
+
+  type VehicleAccess = {
+    vehiclePlate : Text;
+    visitorId : Text;
+    accessTime : Time.Time;
+  };
+
   // Persistent storage
   let companies = Map.empty<Text, Company>();
   let employees = Map.empty<Text, Employee>();
@@ -100,7 +132,10 @@ actor {
   let documentCodeToVisitorId = Map.empty<Text, Text>();
   let principalToEmployeeId = Map.empty<Principal, Text>();
   let companyLogos = Map.empty<Text, Text>();
+  let preRegistrations = Map.empty<Text, PreRegistration>();
   let employeePins = Map.empty<Text, Text>();
+  let companyBlacklist = Map.empty<Text, BlacklistEntry>();
+  let vehicleAccessRecords = Map.empty<Text, VehicleAccess>();
 
   // Helper functions
   func generateRandomText(length : Nat) : Text {
@@ -329,6 +364,14 @@ actor {
 
     if (not hasAnyRole(companyId, callerEmployeeId)) {
       Runtime.trap("Unauthorized: You must be an employee of this company to register visitors");
+    };
+
+    // Check if tcId is in blacklist
+    switch (companyBlacklist.get(getCombinedKey(companyId, tcId))) {
+      case (?_) {
+        Runtime.trap("Bu ziyaretçi kara listede");
+      };
+      case (_) {};
     };
 
     let visitorId = generateRandomText(10);
@@ -827,5 +870,282 @@ actor {
       }
     );
     result;
+  };
+
+  // Blacklist functions
+  public shared ({ caller }) func addVisitorBlacklist(companyId : Text, tcId : Text, reason : Text) : async () {
+    // Only company owner can add to blacklist
+    let employeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) {
+        Runtime.trap("Unauthorized: Caller is not registered as an employee");
+      };
+    };
+
+    if (not isOwner(companyId, employeeId)) {
+      Runtime.trap("Unauthorized: Only company owner can add to blacklist");
+    };
+
+    let entry : BlacklistEntry = {
+      tcId;
+      reason;
+      addedAt = Time.now();
+    };
+
+    companyBlacklist.add(getCombinedKey(companyId, tcId), entry);
+  };
+
+  public shared ({ caller }) func removeVisitorBlacklist(companyId : Text, tcId : Text) : async () {
+    // Only company owner can remove from blacklist
+    let employeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (not isOwner(companyId, employeeId)) {
+      Runtime.trap("Unauthorized: Only company owner can remove from blacklist");
+    };
+
+    companyBlacklist.remove(getCombinedKey(companyId, tcId));
+  };
+
+  public query ({ caller }) func getCompanyBlacklist(loginCode : Text) : async [BlacklistEntry] {
+    let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+
+    // Verify caller is an employee of this company
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (not hasAnyRole(companyId, callerEmployeeId)) {
+      Runtime.trap("Unauthorized: You must be an employee of this company to view the blacklist");
+    };
+
+    companyBlacklist.toArray().filter(
+      func((key, _)) {
+        key.split(#char '_').toArray()[0] == companyId;
+      }
+    ).map(func((_, entry)) { entry });
+  };
+
+  public query ({ caller }) func isVisitorBlacklisted(companyId : Text, tcId : Text) : async Bool {
+    // Verify caller is an employee of this company
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (not hasAnyRole(companyId, callerEmployeeId)) {
+      Runtime.trap("Unauthorized: You must be an employee of this company to check blacklist status");
+    };
+
+    companyBlacklist.containsKey(getCombinedKey(companyId, tcId));
+  };
+
+  ///////////////////////
+  /// PRE-REGISTRATION SYSTEM WITH PROPER AUTHORIZATION
+  ///////////////////////
+
+  // Pre-registration system
+  public shared ({ caller }) func createInvite(companyId : Text, visitingPerson : Text, visitPurpose : Text) : async Text {
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (not hasAnyRole(companyId, callerEmployeeId)) {
+      Runtime.trap("Unauthorized: You must be an employee of this company to create invites");
+    };
+
+    let inviteCode = generateRandomText(12);
+    let preReg : PreRegistration = {
+      inviteCode;
+      companyId;
+      createdBy = callerEmployeeId;
+      visitingPerson;
+      visitPurpose;
+      visitorName = null;
+      visitorSurname = null;
+      tcId = null;
+      phone = null;
+      createdAt = Time.now();
+      status = #pending;
+      visitorId = null;
+    };
+
+    preRegistrations.add(inviteCode, preReg);
+    inviteCode;
+  };
+
+  public query ({ caller }) func getInvitePublic(inviteCode : Text) : async ?{ visitingPerson : Text; visitPurpose : Text; companyName : Text; status : PreRegistrationStatus } {
+    // Public function - no authentication required
+    switch (preRegistrations.get(inviteCode)) {
+      case (?invite) {
+        switch (companies.get(invite.companyId)) {
+          case (?company) {
+            return ?{
+              visitingPerson = invite.visitingPerson;
+              visitPurpose = invite.visitPurpose;
+              companyName = company.name;
+              status = invite.status;
+            };
+          };
+          case (null) { return null };
+        };
+      };
+      case (null) { return null };
+    };
+  };
+
+  public shared ({ caller }) func submitInviteInfo(inviteCode : Text, visitorName : Text, visitorSurname : Text, tcId : Text, phone : Text) : async () {
+    // Public function for visitors - minimal guest check to prevent anonymous abuse
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    switch (preRegistrations.get(inviteCode)) {
+      case (?invite) {
+        if (invite.status != #pending) {
+          Runtime.trap("Invite is not in pending state");
+        };
+
+        let updatedInvite : PreRegistration = {
+          invite with
+          visitorName = ?visitorName;
+          visitorSurname = ?visitorSurname;
+          tcId = ?tcId;
+          phone = ?phone;
+          status = #submitted;
+        };
+        preRegistrations.add(inviteCode, updatedInvite);
+      };
+      case (null) { Runtime.trap("Invite not found") };
+    };
+  };
+
+  public shared ({ caller }) func finalizeInvite(inviteCode : Text, companyId : Text, signatureData : Text, vehiclePlate : ?Text, _visitorType : ?Text, _ndaAccepted : Bool) : async Text {
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (not hasAnyRole(companyId, callerEmployeeId)) {
+      Runtime.trap("Unauthorized: You must be an employee of this company to finalize invites");
+    };
+
+    switch (preRegistrations.get(inviteCode)) {
+      case (?invite) {
+        if (invite.companyId != companyId) {
+          Runtime.trap("Invite does not belong to this company");
+        };
+
+        if (invite.status != #submitted) {
+          Runtime.trap("Invite is not in submitted state");
+        };
+
+        let name = switch (invite.visitorName) {
+          case (?n) { n };
+          case (null) { Runtime.trap("Missing visitor name") };
+        };
+        let surname = switch (invite.visitorSurname) {
+          case (?s) { s };
+          case (null) { Runtime.trap("Missing visitor surname") };
+        };
+        let tcId = switch (invite.tcId) {
+          case (?t) { t };
+          case (null) { "" }; // If tcId is absent, use empty string
+        };
+        let phone = switch (invite.phone) {
+          case (?p) { p };
+          case (null) { "" };
+        };
+
+        // Check if tcId is in blacklist
+        if (tcId != "") {
+          switch (companyBlacklist.get(getCombinedKey(companyId, tcId))) {
+            case (?_) {
+              Runtime.trap("Bu ziyaretçi kara listede");
+            };
+            case (_) {};
+          };
+        };
+
+        let visitorId = generateRandomText(10);
+        let documentCode = generateRandomText(12);
+        let visitor = {
+          visitorId;
+          companyId;
+          name;
+          surname;
+          tcId;
+          phone;
+          visitingPerson = invite.visitingPerson;
+          visitPurpose = invite.visitPurpose;
+          entryTime = Time.now();
+          exitTime = null;
+          signatureData;
+          documentCode;
+          createdBy = callerEmployeeId;
+          vehiclePlate;
+        };
+        visitors.add(visitorId, visitor);
+        activeVisitors.add(visitorId);
+        documentCodeToVisitorId.add(documentCode, visitorId);
+
+        let updatedInvite : PreRegistration = {
+          invite with
+          status = #finalized;
+          visitorId = ?visitorId;
+        };
+        preRegistrations.add(inviteCode, updatedInvite);
+        visitorId;
+      };
+      case (null) { Runtime.trap("Invite not found") };
+    };
+  };
+
+  public query ({ caller }) func getCompanyInvites(companyId : Text) : async [PreRegistration] {
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (not hasAnyRole(companyId, callerEmployeeId)) {
+      Runtime.trap("Unauthorized: You must be an employee of this company to view invites");
+    };
+
+    let entries = preRegistrations.toArray();
+    let result = entries.filter(
+      func((_, invite)) { invite.companyId == companyId }
+    ).map(func((_, invite)) { invite });
+    result;
+  };
+
+  public shared ({ caller }) func cancelInvite(inviteCode : Text, companyId : Text) : async () {
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (not hasAnyRole(companyId, callerEmployeeId)) {
+      Runtime.trap("Unauthorized: You must be an employee of this company to cancel invites");
+    };
+
+    switch (preRegistrations.get(inviteCode)) {
+      case (?invite) {
+        if (invite.companyId != companyId) {
+          Runtime.trap("Invite does not belong to this company");
+        };
+        preRegistrations.add(
+          inviteCode,
+          { invite with status = #cancelled },
+        );
+      };
+      case (null) { Runtime.trap("Invite not found") };
+    };
   };
 };

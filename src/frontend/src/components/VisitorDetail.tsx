@@ -5,6 +5,7 @@ import {
   LogOut,
   Phone,
   Printer,
+  Tag,
   User,
   X,
 } from "lucide-react";
@@ -36,6 +37,51 @@ interface Props {
   onClose: () => void;
   canCheckout?: boolean;
   onCheckoutDone?: () => void;
+  companyName?: string;
+}
+
+function printBadge(visitor: Visitor, companyName: string) {
+  const printWindow = window.open("", "_blank", "width=400,height=300");
+  if (!printWindow) {
+    toast.error("Pop-up pencere açılamadı. Tarayıcı izinlerini kontrol edin.");
+    return;
+  }
+  const entryStr = new Date(
+    Number(visitor.entryTime / BigInt(1_000_000)),
+  ).toLocaleString("tr-TR");
+  const purpose = visitor.visitPurpose.replace(/^\[.*?\]\s*/, "");
+  printWindow.document.write(`
+    <html><head><title>Ziyaretçi Rozeti</title>
+    <style>
+      @page { size: 8cm 5cm; margin: 0; }
+      body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: white; }
+      .badge { border: 2px solid #1e3a2f; border-radius: 8px; padding: 12px; width: 260px; box-sizing: border-box; }
+      .badge-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb; }
+      .badge-title { font-size: 9px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; }
+      .company { font-size: 11px; font-weight: 700; color: #1e3a2f; }
+      .name { font-size: 18px; font-weight: 800; color: #111827; margin-bottom: 8px; line-height: 1.2; }
+      .detail { font-size: 11px; color: #374151; margin-bottom: 3px; }
+      .detail b { color: #111827; }
+      .code { font-size: 10px; font-family: monospace; color: #9ca3af; margin-top: 8px; border-top: 1px solid #f3f4f6; padding-top: 6px; }
+      @media print { body { padding: 0; } }
+    </style>
+    </head><body>
+    <div class="badge">
+      <div class="badge-header">
+        <div class="badge-title">Ziyaretçi Rozeti</div>
+        <div class="company">${companyName}</div>
+      </div>
+      <div class="name">${visitor.name} ${visitor.surname}</div>
+      <div class="detail"><b>Ziyaret Edilen:</b> ${visitor.visitingPerson}</div>
+      <div class="detail"><b>Amaç:</b> ${purpose}</div>
+      <div class="detail"><b>Giriş:</b> ${entryStr}</div>
+      ${visitor.vehiclePlate ? `<div class="detail"><b>Araç:</b> ${visitor.vehiclePlate}</div>` : ""}
+      <div class="code">Belge Kodu: ${visitor.documentCode}</div>
+    </div>
+    <script>window.onload = () => { window.print(); setTimeout(() => window.close(), 500); }<\/script>
+    </body></html>
+  `);
+  printWindow.document.close();
 }
 
 export default function VisitorDetail({
@@ -44,6 +90,7 @@ export default function VisitorDetail({
   onClose,
   canCheckout,
   onCheckoutDone,
+  companyName = "",
 }: Props) {
   const [visitor, setVisitor] = useState<Visitor | null>(null);
   const [loading, setLoading] = useState(true);
@@ -138,6 +185,18 @@ export default function VisitorDetail({
               >
                 <LogOut className="w-3.5 h-3.5" />
                 {checkingOut ? "İşleniyor..." : "Çıkış Yap"}
+              </button>
+            )}
+            {visitor && (
+              <button
+                type="button"
+                data-ocid="visitor.badge_print.button"
+                onClick={() => printBadge(visitor, companyName)}
+                className="flex items-center gap-1.5 bg-slate-100 text-slate-700 text-xs font-medium px-3 py-2 rounded-lg hover:bg-slate-200 transition-colors"
+                title="Rozet Yazdır"
+              >
+                <Tag className="w-3.5 h-3.5" />
+                Rozet
               </button>
             )}
             <button
@@ -246,7 +305,13 @@ export default function VisitorDetail({
                 <InfoCard
                   icon={<FileText className="w-4 h-4" />}
                   label="Ziyaret Amacı"
-                  value={visitor.visitPurpose}
+                  value={
+                    parseVisitorPurpose(visitor.visitPurpose).displayPurpose
+                  }
+                  badge={
+                    parseVisitorPurpose(visitor.visitPurpose).visitorType ??
+                    undefined
+                  }
                   fullWidth={!visitor.vehiclePlate}
                 />
                 <InfoCard
@@ -378,7 +443,10 @@ export default function VisitorDetail({
                   <PrintRow label="Araç Plakası" value={visitor.vehiclePlate} />
                 )}
                 <PrintRow label="Kime Geldi" value={visitor.visitingPerson} />
-                <PrintRow label="Ziyaret Amacı" value={visitor.visitPurpose} />
+                <PrintRow
+                  label="Ziyaret Amacı"
+                  value={visitor.visitPurpose.replace(/^\[.*?\]\s*/, "")}
+                />
                 <PrintRow label="Giriş Saati" value={fmt(visitor.entryTime)} />
                 <PrintRow
                   label="Çıkış Saati"
@@ -446,18 +514,36 @@ export default function VisitorDetail({
   );
 }
 
+function parseVisitorPurpose(visitPurpose: string): {
+  visitorType: string | null;
+  displayPurpose: string;
+} {
+  if (visitPurpose.startsWith("[")) {
+    const end = visitPurpose.indexOf("]");
+    if (end > 0) {
+      return {
+        visitorType: visitPurpose.slice(1, end),
+        displayPurpose: visitPurpose.slice(end + 2).trim(),
+      };
+    }
+  }
+  return { visitorType: null, displayPurpose: visitPurpose };
+}
+
 function InfoCard({
   icon,
   label,
   value,
   mono,
   fullWidth,
+  badge,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   mono?: boolean;
   fullWidth?: boolean;
+  badge?: string;
 }) {
   return (
     <div
@@ -468,6 +554,11 @@ function InfoCard({
         <span className="text-xs font-medium text-muted-foreground">
           {label}
         </span>
+        {badge && (
+          <span className="ml-auto text-xs bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.5 rounded-full font-medium">
+            {badge}
+          </span>
+        )}
       </div>
       <p
         className={`text-sm font-medium text-foreground ${mono ? "font-mono" : ""}`}

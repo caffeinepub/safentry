@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Toaster } from "./components/ui/sonner";
 import CompanyAuth from "./pages/CompanyAuth";
 import CompanyDashboard from "./pages/CompanyDashboard";
 import DocumentVerify from "./pages/DocumentVerify";
 import EmployeeAuth from "./pages/EmployeeAuth";
 import EmployeeDashboard from "./pages/EmployeeDashboard";
+import InviteForm from "./pages/InviteForm";
 import Landing from "./pages/Landing";
 
 export type Screen =
@@ -13,7 +14,8 @@ export type Screen =
   | "employee-auth"
   | "document-verify"
   | "company-dashboard"
-  | "employee-dashboard";
+  | "employee-dashboard"
+  | "invite-form";
 
 export interface SessionCompany {
   companyId: string;
@@ -39,6 +41,13 @@ export interface SessionEmployeeCompany {
 export default function App() {
   const [screen, setScreen] = useState<Screen>("landing");
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("invite")) {
+      setScreen("invite-form");
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-50">
       {screen === "landing" && <Landing onNavigate={setScreen} />}
@@ -53,6 +62,7 @@ export default function App() {
       {screen === "employee-dashboard" && (
         <EmployeeDashboard onNavigate={setScreen} />
       )}
+      {screen === "invite-form" && <InviteForm />}
       <Toaster richColors />
     </div>
   );

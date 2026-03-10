@@ -1,4 +1,4 @@
-import { ArrowLeft, Building2, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Building2, CheckCircle2, Clock } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Screen } from "../App";
@@ -6,6 +6,31 @@ import { backend } from "../lib/backendSingleton";
 
 interface Props {
   onNavigate: (screen: Screen) => void;
+}
+
+function getLockInfo(key: string): { count: number; lockedUntil: number } {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return { count: 0, lockedUntil: 0 };
+    return JSON.parse(raw);
+  } catch {
+    return { count: 0, lockedUntil: 0 };
+  }
+}
+
+function setLockInfo(key: string, count: number, lockedUntil: number) {
+  localStorage.setItem(key, JSON.stringify({ count, lockedUntil }));
+}
+
+function clearLockInfo(key: string) {
+  localStorage.removeItem(key);
+}
+
+function getLockMessage(lockedUntil: number): string | null {
+  const remaining = lockedUntil - Date.now();
+  if (remaining <= 0) return null;
+  const mins = Math.ceil(remaining / 60000);
+  return `Hesabınız kilitlendi. ${mins} dakika sonra tekrar deneyin.`;
 }
 
 export default function CompanyAuth({ onNavigate }: Props) {
@@ -20,6 +45,7 @@ export default function CompanyAuth({ onNavigate }: Props) {
     loginCode: string;
   } | null>(null);
   const [loginCode, setLoginCode] = useState("");
+  const [lockMessage, setLockMessage] = useState<string | null>(null);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,13 +75,30 @@ export default function CompanyAuth({ onNavigate }: Props) {
       toast.error("Lütfen giriş kodunu girin");
       return;
     }
+    const lockKey = `login_attempts_company_${loginCode.trim()}`;
+    const info = getLockInfo(lockKey);
+    const lockMsg = getLockMessage(info.lockedUntil);
+    if (lockMsg) {
+      setLockMessage(lockMsg);
+      return;
+    }
     setLoading(true);
     try {
       const company = await backend.loginCompany(loginCode.trim());
       if (!company) {
-        toast.error("Geçersiz giriş kodu");
+        const newCount = info.count + 1;
+        const lockedUntil = newCount >= 5 ? Date.now() + 15 * 60 * 1000 : 0;
+        setLockInfo(lockKey, newCount, lockedUntil);
+        if (newCount >= 5) {
+          setLockMessage("Hesabınız 15 dakika boyunca kilitlendi.");
+        } else {
+          toast.error(
+            `Geçersiz giriş kodu (${5 - newCount} deneme hakkınız kaldı)`,
+          );
+        }
         return;
       }
+      clearLockInfo(lockKey);
       sessionStorage.setItem("safentry_company", JSON.stringify(company));
       onNavigate("company-dashboard");
     } catch {
@@ -131,16 +174,28 @@ export default function CompanyAuth({ onNavigate }: Props) {
                   data-ocid="company_auth.login_code.input"
                   type="text"
                   value={loginCode}
-                  onChange={(e) => setLoginCode(e.target.value)}
+                  onChange={(e) => {
+                    setLoginCode(e.target.value);
+                    setLockMessage(null);
+                  }}
                   placeholder="12 haneli giriş kodunuz"
                   maxLength={12}
                   className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono bg-white text-foreground placeholder:text-muted-foreground"
                 />
               </div>
+              {lockMessage && (
+                <div
+                  data-ocid="company_auth.lock.error_state"
+                  className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3"
+                >
+                  <Clock className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-700">{lockMessage}</p>
+                </div>
+              )}
               <button
                 data-ocid="company_auth.login.submit_button"
                 type="submit"
-                disabled={loading}
+                disabled={loading || !!lockMessage}
                 className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 text-sm"
               >
                 {loading ? "Giriş yapılıyor..." : "Giriş Yap"}

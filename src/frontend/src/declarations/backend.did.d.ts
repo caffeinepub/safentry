@@ -58,6 +58,7 @@ export interface Visitor {
   'exitTime' : [] | [Time],
   'entryTime' : Time,
   'visitingPerson' : string,
+  'vehiclePlate' : [] | [string],
   'name' : string,
   'createdBy' : string,
   'tcId' : string,
@@ -82,9 +83,14 @@ export interface _SERVICE {
     [string],
     Array<{ 'role' : EmployeeRole, 'employee' : Employee }>
   >,
+  'getCompanyLogo' : ActorMethod<[string], [] | [string]>,
   'getCompanyStats' : ActorMethod<[string], CompanyStats>,
   'getCompanyStatsAsCompany' : ActorMethod<[string], [] | [CompanyStats]>,
   'getMyCompanies' : ActorMethod<[string], Array<[Company, EmployeeRole]>>,
+  'getPurposeDistributionAsCompany' : ActorMethod<
+    [string],
+    Array<[string, bigint]>
+  >,
   'getTopVisitedPersons' : ActorMethod<
     [string, bigint],
     Array<[string, bigint]>
@@ -95,8 +101,10 @@ export interface _SERVICE {
   >,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getVisitorById' : ActorMethod<[string, string], [] | [Visitor]>,
+  'getVisitorCountByTcId' : ActorMethod<[string, string], bigint>,
   'getVisitors' : ActorMethod<[string], Array<Visitor>>,
   'getVisitorsAsCompany' : ActorMethod<[string], Array<Visitor>>,
+  'getVisitorsByPerson' : ActorMethod<[string, string], Array<Visitor>>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'loginCompany' : ActorMethod<[string], [] | [Company]>,
   'loginEmployee' : ActorMethod<[string], [] | [Employee]>,
@@ -106,14 +114,31 @@ export interface _SERVICE {
   >,
   'registerEmployee' : ActorMethod<[string, string], string>,
   'registerVisitor' : ActorMethod<
-    [string, string, string, string, string, string, string, string],
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      [] | [string],
+    ],
     string
   >,
   'removeEmployeeFromCompany' : ActorMethod<[string, string], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'setCompanyLogo' : ActorMethod<[string, string], undefined>,
+  'setEmployeePin' : ActorMethod<[string, string], undefined>,
   'setEmployeeRole' : ActorMethod<[string, string, EmployeeRole], undefined>,
+  'updateCompanyProfile' : ActorMethod<
+    [string, string, string, string, string],
+    undefined
+  >,
   'updateVisitorSignature' : ActorMethod<[string, string, string], undefined>,
   'verifyDocument' : ActorMethod<[string], [] | [VerifyDocumentResult]>,
+  'verifyEmployeePin' : ActorMethod<[string, string], boolean>,
 }
 export declare const idlService: IDL.ServiceClass;
 export declare const idlInitArgs: IDL.Type[];

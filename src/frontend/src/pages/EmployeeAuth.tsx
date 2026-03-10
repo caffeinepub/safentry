@@ -1,5 +1,11 @@
-import { ArrowLeft, CheckCircle2, UserCog } from "lucide-react";
-import { useState } from "react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Clock,
+  KeyRound,
+  UserCog,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { Screen } from "../App";
 import { backend } from "../lib/backendSingleton";
@@ -8,7 +14,7 @@ interface Props {
   onNavigate: (screen: Screen) => void;
 }
 
-type Step = "tabs" | "select-company";
+type Step = "tabs" | "pin-verify" | "select-company";
 
 interface EmployeeData {
   employeeId: string;
@@ -22,6 +28,31 @@ interface CompanyOption {
   role: string;
 }
 
+function getLockInfo(key: string): { count: number; lockedUntil: number } {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return { count: 0, lockedUntil: 0 };
+    return JSON.parse(raw);
+  } catch {
+    return { count: 0, lockedUntil: 0 };
+  }
+}
+
+function setLockInfo(key: string, count: number, lockedUntil: number) {
+  localStorage.setItem(key, JSON.stringify({ count, lockedUntil }));
+}
+
+function clearLockInfo(key: string) {
+  localStorage.removeItem(key);
+}
+
+function getLockMessage(lockedUntil: number): string | null {
+  const remaining = lockedUntil - Date.now();
+  if (remaining <= 0) return null;
+  const mins = Math.ceil(remaining / 60000);
+  return `Hesabınız ${mins} dakika boyunca kilitlendi. Lütfen ${mins} dakika sonra tekrar deneyin.`;
+}
+
 export default function EmployeeAuth({ onNavigate }: Props) {
   const [tab, setTab] = useState<"login" | "register">("login");
   const [step, setStep] = useState<Step>("tabs");
@@ -33,6 +64,19 @@ export default function EmployeeAuth({ onNavigate }: Props) {
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [manualCompanyId, setManualCompanyId] = useState("");
+  const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [lockMessage, setLockMessage] = useState<string | null>(null);
+
+  // Check lock on emp code change
+  useEffect(() => {
+    if (!empCode.trim()) {
+      setLockMessage(null);
+      return;
+    }
+    const info = getLockInfo(`login_attempts_employee_${empCode.trim()}`);
+    setLockMessage(getLockMessage(info.lockedUntil));
+  }, [empCode]);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,13 +101,32 @@ export default function EmployeeAuth({ onNavigate }: Props) {
       toast.error("Lütfen personel kodunu girin");
       return;
     }
+    const lockKey = `login_attempts_employee_${empCode.trim()}`;
+    const info = getLockInfo(lockKey);
+    const lockMsg = getLockMessage(info.lockedUntil);
+    if (lockMsg) {
+      setLockMessage(lockMsg);
+      return;
+    }
     setLoading(true);
     try {
       const emp = await backend.loginEmployee(empCode.trim());
       if (!emp) {
-        toast.error("Geçersiz personel kodu");
+        const newCount = info.count + 1;
+        const lockedUntil = newCount >= 5 ? Date.now() + 15 * 60 * 1000 : 0;
+        setLockInfo(lockKey, newCount, lockedUntil);
+        if (newCount >= 5) {
+          setLockMessage(
+            "Hesabınız 15 dakika boyunca kilitlendi. 15 dakika sonra tekrar deneyin.",
+          );
+        } else {
+          toast.error(
+            `Geçersiz personel kodu (${5 - newCount} deneme hakkınız kaldı)`,
+          );
+        }
         return;
       }
+      clearLockInfo(lockKey);
       setEmployeeData({
         employeeId: emp.employeeId,
         name: emp.name,
@@ -76,9 +139,38 @@ export default function EmployeeAuth({ onNavigate }: Props) {
         role: role,
       }));
       setCompanies(options);
-      setStep("select-company");
+      // Check if PIN is set
+      const pinSet = localStorage.getItem(`pin_set_${emp.employeeId}`);
+      if (pinSet === "1") {
+        setStep("pin-verify");
+      } else {
+        setStep("select-company");
+      }
     } catch {
       toast.error("Giriş sırasında hata oluştu");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePinVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pin.trim() || !employeeData) return;
+    setLoading(true);
+    try {
+      const valid = await backend.verifyEmployeePin(
+        employeeData.employeeId,
+        pin.trim(),
+      );
+      if (!valid) {
+        setPinError("PIN yanlış, tekrar deneyin.");
+        setPin("");
+        return;
+      }
+      setPinError("");
+      setStep("select-company");
+    } catch {
+      toast.error("PIN doğrulanamadı");
     } finally {
       setLoading(false);
     }
@@ -119,6 +211,89 @@ export default function EmployeeAuth({ onNavigate }: Props) {
       setLoading(false);
     }
   };
+
+  // PIN verify step
+  if (step === "pin-verify" && employeeData) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <header className="bg-white border-b border-border px-4 py-3 flex items-center gap-3">
+          <button
+            type="button"
+            data-ocid="employee_auth.back.button"
+            onClick={() => {
+              setStep("tabs");
+              setPin("");
+              setPinError("");
+            }}
+            className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <h1 className="font-display font-semibold text-foreground text-sm">
+            PIN Doğrulama
+          </h1>
+        </header>
+        <div className="flex-1 flex items-start justify-center p-6 pt-12">
+          <div className="w-full max-w-sm">
+            <div className="bg-white rounded-2xl shadow-card border border-border p-6 space-y-5">
+              <div className="text-center">
+                <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                  <KeyRound className="w-6 h-6 text-emerald-600" />
+                </div>
+                <h2 className="font-display font-semibold text-foreground">
+                  PIN Girin
+                </h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {employeeData.name} {employeeData.surname} · PIN doğrulaması
+                  gerekiyor
+                </p>
+              </div>
+              <form onSubmit={handlePinVerify} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="pin-input"
+                    className="block text-sm font-medium text-foreground"
+                  >
+                    PIN (4-6 rakam)
+                  </label>
+                  <input
+                    id="pin-input"
+                    data-ocid="employee_auth.pin.input"
+                    type="password"
+                    inputMode="numeric"
+                    value={pin}
+                    onChange={(e) => {
+                      setPin(e.target.value);
+                      setPinError("");
+                    }}
+                    placeholder="PIN kodunuzu girin"
+                    maxLength={6}
+                    className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono bg-white text-foreground placeholder:text-muted-foreground text-center tracking-widest text-lg"
+                  />
+                  {pinError && (
+                    <p
+                      data-ocid="employee_auth.pin.error_state"
+                      className="text-xs text-red-600"
+                    >
+                      {pinError}
+                    </p>
+                  )}
+                </div>
+                <button
+                  data-ocid="employee_auth.pin.submit_button"
+                  type="submit"
+                  disabled={loading || !pin.trim()}
+                  className="w-full bg-emerald-700 text-white py-2.5 rounded-xl font-medium hover:bg-emerald-800 transition-colors disabled:opacity-50 text-sm"
+                >
+                  {loading ? "Doğrulanıyor..." : "Devam Et"}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (step === "select-company" && employeeData) {
     return (
@@ -272,16 +447,28 @@ export default function EmployeeAuth({ onNavigate }: Props) {
                   id="ea-emp-code"
                   data-ocid="employee_auth.emp_code.input"
                   value={empCode}
-                  onChange={(e) => setEmpCode(e.target.value)}
+                  onChange={(e) => {
+                    setEmpCode(e.target.value);
+                    setLockMessage(null);
+                  }}
                   placeholder="Personel kodunuzu girin"
                   maxLength={8}
                   className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono bg-white text-foreground placeholder:text-muted-foreground"
                 />
               </div>
+              {lockMessage && (
+                <div
+                  data-ocid="employee_auth.lock.error_state"
+                  className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3"
+                >
+                  <Clock className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-700">{lockMessage}</p>
+                </div>
+              )}
               <button
                 data-ocid="employee_auth.login.submit_button"
                 type="submit"
-                disabled={loading}
+                disabled={loading || !!lockMessage}
                 className="w-full bg-emerald-700 text-white py-2.5 rounded-xl font-medium hover:bg-emerald-800 transition-colors disabled:opacity-50 text-sm"
               >
                 {loading ? "Giriş yapılıyor..." : "Giriş Yap"}

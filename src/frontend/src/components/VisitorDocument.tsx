@@ -32,6 +32,7 @@ export default function VisitorDocument({
 }: Props) {
   const [visitor, setVisitor] = useState<Visitor | null>(null);
   const [loading, setLoading] = useState(true);
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,6 +44,24 @@ export default function VisitorDocument({
       })
       .catch(() => toast.error("Hata oluştu"))
       .finally(() => setLoading(false));
+
+    // Load company logo from sessionStorage loginCode
+    try {
+      const raw = sessionStorage.getItem("safentry_company");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { loginCode: string };
+        if (parsed.loginCode) {
+          backend
+            .getCompanyLogo(parsed.loginCode)
+            .then((logo) => {
+              if (logo) setCompanyLogo(logo);
+            })
+            .catch(() => {});
+        }
+      }
+    } catch {
+      // ignore
+    }
   }, [visitorId, companyId]);
 
   const fmt = (ts: bigint) =>
@@ -90,9 +109,18 @@ export default function VisitorDocument({
 
       <div ref={printRef} className="p-6 print:p-8">
         <div className="flex justify-between items-start mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">SAFENTRY</h1>
-            <p className="text-xs text-slate-500">Ziyaretçi Giriş Belgesi</p>
+          <div className="flex items-center gap-3">
+            {companyLogo && (
+              <img
+                src={companyLogo}
+                alt="Şirket logosu"
+                className="max-h-12 max-w-24 object-contain"
+              />
+            )}
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">SAFENTRY</h1>
+              <p className="text-xs text-slate-500">Ziyaretçi Giriş Belgesi</p>
+            </div>
           </div>
           <div className="text-right">
             <div className="text-xs text-slate-500">Belge Kodu</div>

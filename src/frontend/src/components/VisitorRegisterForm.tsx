@@ -1,3 +1,4 @@
+import { AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { backend } from "../lib/backendSingleton";
@@ -8,6 +9,17 @@ interface Props {
   employeeId: string;
 }
 
+const PURPOSE_OPTIONS = [
+  "Toplantı",
+  "İş Görüşmesi",
+  "Teslimat",
+  "Servis / Bakım",
+  "Denetim",
+  "Eğitim",
+  "Ziyaret",
+  "Diğer",
+];
+
 export default function VisitorRegisterForm({
   companyId,
   employeeId: _employeeId,
@@ -16,10 +28,14 @@ export default function VisitorRegisterForm({
   const [surname, setSurname] = useState("");
   const [tcId, setTcId] = useState("");
   const [phone, setPhone] = useState("");
+  const [vehiclePlate, setVehiclePlate] = useState("");
   const [visitingPerson, setVisitingPerson] = useState("");
-  const [visitPurpose, setVisitPurpose] = useState("");
+  const [visitPurposeType, setVisitPurposeType] = useState("");
+  const [visitPurposeCustom, setVisitPurposeCustom] = useState("");
   const [loading, setLoading] = useState(false);
   const [savedVisitorId, setSavedVisitorId] = useState<string | null>(null);
+  const [recurringCount, setRecurringCount] = useState<number | null>(null);
+  const recurringTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
@@ -36,6 +52,29 @@ export default function VisitorRegisterForm({
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
   }, []);
+
+  // Recurring visitor check — debounced when tcId hits exactly 11 chars
+  useEffect(() => {
+    if (recurringTimer.current) clearTimeout(recurringTimer.current);
+
+    if (tcId.length !== 11) {
+      setRecurringCount(null);
+      return;
+    }
+
+    recurringTimer.current = setTimeout(async () => {
+      try {
+        const count = await backend.getVisitorCountByTcId(companyId, tcId);
+        setRecurringCount(Number(count));
+      } catch {
+        setRecurringCount(null);
+      }
+    }, 400);
+
+    return () => {
+      if (recurringTimer.current) clearTimeout(recurringTimer.current);
+    };
+  }, [tcId, companyId]);
 
   const getPos = (
     e: React.MouseEvent | React.TouchEvent,
@@ -103,8 +142,14 @@ export default function VisitorRegisterForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !surname || !phone || !visitingPerson || !visitPurpose) {
+    const visitPurpose =
+      visitPurposeType === "Diğer" ? visitPurposeCustom : visitPurposeType;
+    if (!name || !surname || !phone || !visitingPerson || !visitPurposeType) {
       toast.error("Lütfen zorunlu alanları doldurun");
+      return;
+    }
+    if (visitPurposeType === "Diğer" && !visitPurposeCustom) {
+      toast.error("Lütfen ziyaret amacını belirtin");
       return;
     }
     setLoading(true);
@@ -119,6 +164,7 @@ export default function VisitorRegisterForm({
         visitingPerson,
         visitPurpose,
         sigData,
+        vehiclePlate || null,
       );
       setSavedVisitorId(visitorId);
       toast.success("Ziyaretçi kaydedildi");
@@ -134,10 +180,13 @@ export default function VisitorRegisterForm({
     setSurname("");
     setTcId("");
     setPhone("");
+    setVehiclePlate("");
     setVisitingPerson("");
-    setVisitPurpose("");
+    setVisitPurposeType("");
+    setVisitPurposeCustom("");
     setSavedVisitorId(null);
     setHasSig(false);
+    setRecurringCount(null);
     clearSignature();
   };
 
@@ -207,6 +256,19 @@ export default function VisitorRegisterForm({
             maxLength={11}
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
           />
+          {recurringCount !== null && recurringCount > 0 && (
+            <div
+              data-ocid="visitor_form.recurring.section"
+              className="mt-1.5 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-amber-800 leading-relaxed">
+                Bu kişi daha önce{" "}
+                <span className="font-semibold">{recurringCount} kez</span> bu
+                şirketi ziyaret etti.
+              </p>
+            </div>
+          )}
         </div>
         <div>
           <label
@@ -226,21 +288,39 @@ export default function VisitorRegisterForm({
         </div>
       </div>
 
-      <div>
-        <label
-          htmlFor="vf-visiting"
-          className="block text-xs font-medium text-slate-600 mb-1"
-        >
-          Kime Geldi *
-        </label>
-        <input
-          id="vf-visiting"
-          data-ocid="visitor_form.visiting_person.input"
-          value={visitingPerson}
-          onChange={(e) => setVisitingPerson(e.target.value)}
-          placeholder="Ziyaret edilecek kişi"
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label
+            htmlFor="vf-plate"
+            className="block text-xs font-medium text-slate-600 mb-1"
+          >
+            Araç Plakası
+          </label>
+          <input
+            id="vf-plate"
+            data-ocid="visitor_form.plate.input"
+            value={vehiclePlate}
+            onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
+            placeholder="34 ABC 123"
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono tracking-wider"
+          />
+        </div>
+        <div>
+          <label
+            htmlFor="vf-visiting"
+            className="block text-xs font-medium text-slate-600 mb-1"
+          >
+            Kime Geldi *
+          </label>
+          <input
+            id="vf-visiting"
+            data-ocid="visitor_form.visiting_person.input"
+            value={visitingPerson}
+            onChange={(e) => setVisitingPerson(e.target.value)}
+            placeholder="Ziyaret edilecek kişi"
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
       </div>
 
       <div>
@@ -250,14 +330,29 @@ export default function VisitorRegisterForm({
         >
           Ziyaret Amacı *
         </label>
-        <input
+        <select
           id="vf-purpose"
-          data-ocid="visitor_form.purpose.input"
-          value={visitPurpose}
-          onChange={(e) => setVisitPurpose(e.target.value)}
-          placeholder="Ziyaretin amacı"
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        />
+          data-ocid="visitor_form.purpose.select"
+          value={visitPurposeType}
+          onChange={(e) => setVisitPurposeType(e.target.value)}
+          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+        >
+          <option value="">Seçiniz...</option>
+          {PURPOSE_OPTIONS.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+        {visitPurposeType === "Diğer" && (
+          <input
+            data-ocid="visitor_form.purpose_custom.input"
+            value={visitPurposeCustom}
+            onChange={(e) => setVisitPurposeCustom(e.target.value)}
+            placeholder="Ziyaret amacını belirtin"
+            className="mt-2 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        )}
       </div>
 
       <div>

@@ -3,16 +3,19 @@ import Set "mo:core/Set";
 import Array "mo:core/Array";
 import Text "mo:core/Text";
 import Time "mo:core/Time";
-import Iter "mo:core/Iter";
 import Order "mo:core/Order";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Char "mo:core/Char";
 import Int "mo:core/Int";
+import Nat "mo:core/Nat";
+import Iter "mo:core/Iter";
 import Option "mo:core/Option";
 import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
+import Migration "migration";
 
+(with migration = Migration.run)
 actor {
   // Initialize access control
   let accessControlState = AccessControl.initState();
@@ -67,6 +70,7 @@ actor {
     signatureData : Text;
     documentCode : Text;
     createdBy : Text; // employeeId of creator
+    vehiclePlate : ?Text; // The new field
   };
 
   type CompanyStats = {
@@ -90,11 +94,13 @@ actor {
   // Persistent storage
   let companies = Map.empty<Text, Company>();
   let employees = Map.empty<Text, Employee>();
-  let companyEmployees = Map.empty<Text, EmployeeRole>(); // Key format: "companyId_employeeId"
+  let companyEmployees = Map.empty<Text, EmployeeRole>();
   let visitors = Map.empty<Text, Visitor>();
   let activeVisitors = Set.empty<Text>();
   let documentCodeToVisitorId = Map.empty<Text, Text>();
   let principalToEmployeeId = Map.empty<Principal, Text>();
+  let companyLogos = Map.empty<Text, Text>();
+  let employeePins = Map.empty<Text, Text>();
 
   // Helper functions
   func generateRandomText(length : Nat) : Text {
@@ -179,6 +185,11 @@ actor {
   // Public functions with authorization
 
   public shared ({ caller }) func registerCompany(name : Text, sector : Text, address : Text, contactPersonName : Text) : async { companyId : Text; loginCode : Text } {
+    // Require at least guest permission to prevent anonymous spam
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
     let companyId = generateRandomText(11);
     let loginCode = generateRandomText(12);
 
@@ -197,6 +208,7 @@ actor {
   };
 
   public query ({ caller }) func loginCompany(loginCode : Text) : async ?Company {
+    // Public login endpoint - no auth required for login operations
     for ((_, company) in companies.entries()) {
       if (company.loginCode == loginCode) {
         return ?company;
@@ -206,6 +218,11 @@ actor {
   };
 
   public shared ({ caller }) func registerEmployee(name : Text, surname : Text) : async Text {
+    // Require at least guest permission to prevent anonymous employee creation
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
     let employeeId = generateRandomText(8);
     let employee : Employee = {
       employeeId;
@@ -219,6 +236,7 @@ actor {
   };
 
   public query ({ caller }) func loginEmployee(employeeId : Text) : async ?Employee {
+    // Public login endpoint - no auth required for login operations
     employees.get(employeeId);
   };
 
@@ -303,7 +321,7 @@ actor {
     companyEmployees.remove(key);
   };
 
-  public shared ({ caller }) func registerVisitor(companyId : Text, name : Text, surname : Text, tcId : Text, phone : Text, visitingPerson : Text, visitPurpose : Text, signatureData : Text) : async Text {
+  public shared ({ caller }) func registerVisitor(companyId : Text, name : Text, surname : Text, tcId : Text, phone : Text, visitingPerson : Text, visitPurpose : Text, signatureData : Text, vehiclePlate : ?Text) : async Text {
     let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
       case (?id) { id };
       case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
@@ -329,6 +347,7 @@ actor {
       signatureData;
       documentCode;
       createdBy = callerEmployeeId;
+      vehiclePlate;
     };
     visitors.add(visitorId, visitor);
     activeVisitors.add(visitorId);
@@ -430,7 +449,7 @@ actor {
   };
 
   public query ({ caller }) func verifyDocument(documentCode : Text) : async ?VerifyDocumentResult {
-    // Public function - no authentication required
+    // Public function - no authentication required for document verification
     switch (documentCodeToVisitorId.get(documentCode)) {
       case (?visitorId) {
         switch (visitors.get(visitorId)) {
@@ -522,10 +541,15 @@ actor {
     };
   };
 
-  // New functions.
+  // New functions with loginCode-based authentication
+  // These require at least guest-level authentication to prevent anonymous access
 
   public query ({ caller }) func getVisitorsAsCompany(loginCode : Text) : async [Visitor] {
-    // Authenticates via loginCode, no employee auth needed
+    // Require at least guest permission to prevent completely anonymous access
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
     let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
       case (?id) { id };
       case (null) { Runtime.trap("Invalid login code") };
@@ -541,7 +565,11 @@ actor {
   };
 
   public query ({ caller }) func getCompanyStatsAsCompany(loginCode : Text) : async ?CompanyStats {
-    // Authenticates via loginCode, no employee auth needed
+    // Require at least guest permission to prevent completely anonymous access
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
     switch (getCompanyIdByLoginCode(loginCode)) {
       case (?companyId) {
         ?calculateCompanyStats(companyId);
@@ -564,13 +592,43 @@ actor {
   };
 
   public query ({ caller }) func getTopVisitedPersonsAsCompany(loginCode : Text, limit : Nat) : async [(Text, Nat)] {
-    // Authenticates via loginCode, no employee auth needed
+    // Require at least guest permission to prevent completely anonymous access
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
     let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
       case (?id) { id };
       case (null) { Runtime.trap("Invalid login code") };
     };
 
     getTopVisitedPersonsInternal(companyId, limit);
+  };
+
+  public query ({ caller }) func getPurposeDistributionAsCompany(loginCode : Text) : async [(Text, Nat)] {
+    // Require at least guest permission to prevent completely anonymous access
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+
+    let purposeCounts = Map.empty<Text, Nat>();
+
+    for ((_, visitor) in visitors.entries()) {
+      if (visitor.companyId == companyId) {
+        let currentCount = switch (purposeCounts.get(visitor.visitPurpose)) {
+          case (?count) { count };
+          case (null) { 0 };
+        };
+        purposeCounts.add(visitor.visitPurpose, currentCount + 1);
+      };
+    };
+
+    purposeCounts.toArray();
   };
 
   // Helper functions for new features
@@ -629,11 +687,145 @@ actor {
       }
     );
 
-    let resultSize = if (sortedList.size() < limit) {
-      sortedList.size();
-    } else {
-      limit;
-    };
+    let resultSize = Nat.min(sortedList.size(), limit);
     sortedList.sliceToArray(0, resultSize);
+  };
+
+  // New functions by user request - with proper authorization
+
+  public query ({ caller }) func getVisitorCountByTcId(_companyId : Text, _tcId : Text) : async Nat {
+    // Require at least guest permission to prevent completely anonymous access to sensitive TC ID data
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    var count = 0;
+    for ((_, visitor) in visitors.entries()) {
+      if (visitor.companyId == _companyId and visitor.tcId == _tcId) {
+        count += 1;
+      };
+    };
+    count;
+  };
+
+  public shared ({ caller }) func setCompanyLogo(loginCode : Text, logoData : Text) : async () {
+    // Require at least guest permission to prevent completely anonymous access
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?companyId) {
+        companyLogos.add(companyId, logoData);
+      };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+  };
+
+  public query ({ caller }) func getCompanyLogo(loginCode : Text) : async ?Text {
+    // Require at least guest permission to prevent completely anonymous access
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?companyId) {
+        return companyLogos.get(companyId);
+      };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+  };
+
+  // Employee PIN functionality - FIXED with proper authorization
+  public shared ({ caller }) func setEmployeePin(employeeId : Text, pin : Text) : async () {
+    // Only the employee themselves can set their own PIN
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (callerEmployeeId != employeeId) {
+      Runtime.trap("Unauthorized: You can only set your own PIN");
+    };
+
+    switch (employees.get(employeeId)) {
+      case (?_) {
+        employeePins.add(employeeId, pin);
+      };
+      case (null) { Runtime.trap("Employee not found") };
+    };
+  };
+
+  public query ({ caller }) func verifyEmployeePin(employeeId : Text, pin : Text) : async Bool {
+    // Only the employee themselves can verify their own PIN
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (callerEmployeeId != employeeId) {
+      Runtime.trap("Unauthorized: You can only verify your own PIN");
+    };
+
+    switch (employeePins.get(employeeId)) {
+      case (?storedPin) {
+        storedPin == pin;
+      };
+      case (null) { false };
+    };
+  };
+
+  // Company profile update - only callable by company owner
+  public shared ({ caller }) func updateCompanyProfile(loginCode : Text, name : Text, sector : Text, address : Text, contactPersonName : Text) : async () {
+    let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+
+    let employeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (not isOwner(companyId, employeeId)) {
+      Runtime.trap("Unauthorized: Only company owner can update the company profile");
+    };
+
+    switch (companies.get(companyId)) {
+      case (?existingCompany) {
+        let updatedCompany : Company = {
+          companyId = existingCompany.companyId;
+          loginCode = existingCompany.loginCode;
+          name;
+          sector;
+          address;
+          contactPersonName;
+          createdAt = existingCompany.createdAt;
+        };
+        companies.add(companyId, updatedCompany);
+      };
+      case (null) { Runtime.trap("Company not found") };
+    };
+  };
+
+  // Get visitors by person for in-panel notification
+  public query ({ caller }) func getVisitorsByPerson(companyId : Text, personName : Text) : async [Visitor] {
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (not hasAnyRole(companyId, callerEmployeeId)) {
+      Runtime.trap("Unauthorized: You must be an employee of this company");
+    };
+
+    let result = visitors.toArray().map(
+      func((_, visitor)) { visitor }
+    ).filter(
+      func(visitor) {
+        visitor.companyId == companyId and visitor.visitingPerson == personName
+      }
+    );
+    result;
   };
 };

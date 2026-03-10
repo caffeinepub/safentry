@@ -1,12 +1,18 @@
 import {
   BarChart3,
+  Bell,
   Calendar,
+  CheckCircle2,
+  KeyRound,
   List,
+  Loader2,
   LogOut,
   Medal,
+  Repeat2,
   TrendingUp,
   UserPlus,
   Users,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -26,6 +32,12 @@ type Tab = "register" | "list" | "employees" | "stats";
 
 interface Visitor {
   entryTime: bigint;
+  exitTime?: bigint;
+  createdBy?: string;
+  tcId: string;
+  name: string;
+  surname: string;
+  visitingPerson: string;
   [key: string]: unknown;
 }
 
@@ -48,6 +60,17 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
   } | null>(null);
   const [topPersons, setTopPersons] = useState<[string, bigint][]>([]);
   const [chartVisitors, setChartVisitors] = useState<Visitor[]>([]);
+  const [todayMyVisitors, setTodayMyVisitors] = useState(0);
+
+  // PIN change modal
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [newPin, setNewPin] = useState("");
+  const [newPinConfirm, setNewPinConfirm] = useState("");
+  const [pinSaving, setPinSaving] = useState(false);
+  const [pinError, setPinError] = useState("");
+
+  // Visitor notification banner
+  const [myActiveVisitors, setMyActiveVisitors] = useState<Visitor[]>([]);
 
   useEffect(() => {
     const emp = sessionStorage.getItem("safentry_employee");
@@ -72,6 +95,36 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
   // Auto-logout after 30 minutes of inactivity
   useSessionTimeout(logout, !!employee);
 
+  // Load today's visitor count + active visitor notification
+  useEffect(() => {
+    if (!company || !employee) return;
+    const fullName = `${employee.name} ${employee.surname}`;
+    Promise.all([
+      backend.getVisitors(company.companyId).catch(() => [] as Visitor[]),
+      backend
+        .getVisitorsByPerson(company.companyId, fullName)
+        .catch(() => [] as Visitor[]),
+    ]).then(([allVisitors, myVisitors]) => {
+      const today = new Date().toDateString();
+      const count = (allVisitors as unknown as Visitor[]).filter((v) => {
+        const isToday =
+          new Date(Number(v.entryTime / BigInt(1_000_000))).toDateString() ===
+          today;
+        return v.createdBy === employee.employeeId && isToday;
+      }).length;
+      setTodayMyVisitors(count);
+
+      // Active visitors (visiting this person, no exit today)
+      const todayActive = (myVisitors as unknown as Visitor[]).filter((v) => {
+        const isToday =
+          new Date(Number(v.entryTime / BigInt(1_000_000))).toDateString() ===
+          today;
+        return isToday && !v.exitTime;
+      });
+      setMyActiveVisitors(todayActive);
+    });
+  }, [company, employee]);
+
   const loadStats = useCallback((c: { companyId: string }) => {
     Promise.all([
       backend
@@ -95,10 +148,62 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
     }
   }, [company, tab, loadStats]);
 
+  const handlePinSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError("");
+    if (!newPin || newPin.length < 4) {
+      setPinError("PIN en az 4 rakam olmalıdır");
+      return;
+    }
+    if (!/^\d+$/.test(newPin)) {
+      setPinError("PIN yalnızca rakamlardan oluşmalıdır");
+      return;
+    }
+    if (newPin !== newPinConfirm) {
+      setPinError("PIN'ler eşleşmiyor");
+      return;
+    }
+    if (!employee) return;
+    setPinSaving(true);
+    try {
+      await backend.setEmployeePin(employee.employeeId, newPin);
+      localStorage.setItem(`pin_set_${employee.employeeId}`, "1");
+      toast.success("PIN başarıyla kaydedildi");
+      setShowPinModal(false);
+      setNewPin("");
+      setNewPinConfirm("");
+    } catch {
+      toast.error("PIN kaydedilemedi");
+    } finally {
+      setPinSaving(false);
+    }
+  };
+
   if (!employee || !company) return null;
 
   const canManageEmployees = role === "owner";
   const canViewStats = role === "owner" || role === "authorized";
+
+  // Compute frequent visitors (top 5 with count > 1)
+  const frequentVisitors = (() => {
+    const map = new Map<
+      string,
+      { name: string; surname: string; count: number }
+    >();
+    for (const v of chartVisitors) {
+      if (!v.tcId) continue;
+      const existing = map.get(v.tcId);
+      if (existing) {
+        existing.count++;
+      } else {
+        map.set(v.tcId, { name: v.name, surname: v.surname, count: 1 });
+      }
+    }
+    return Array.from(map.values())
+      .filter((item) => item.count > 1)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  })();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -119,16 +224,60 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          data-ocid="employee_dash.logout.button"
-          onClick={logout}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-lg transition-colors"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          Çıkış
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            data-ocid="employee_dash.change_pin.button"
+            onClick={() => setShowPinModal(true)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-lg transition-colors"
+            title="Şifre / PIN Değiştir"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">PIN</span>
+          </button>
+          <button
+            type="button"
+            data-ocid="employee_dash.logout.button"
+            onClick={logout}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Çıkış
+          </button>
+        </div>
       </header>
+
+      {/* Visitor notification banner */}
+      {myActiveVisitors.length > 0 && (
+        <div
+          data-ocid="employee_dash.visitor_notification.card"
+          className="flex items-start gap-2 px-4 py-2.5 bg-blue-50 border-b border-blue-100 text-blue-800"
+        >
+          <Bell className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <span className="font-semibold">Ziyaretçiniz var:</span>{" "}
+            {myActiveVisitors
+              .slice(0, 3)
+              .map((v) => `${v.name} ${v.surname}`)
+              .join(", ")}
+            {myActiveVisitors.length > 3 &&
+              ` +${myActiveVisitors.length - 3} diğer`}
+            {" — henüz çıkış yapmadı"}
+          </div>
+        </div>
+      )}
+
+      {todayMyVisitors > 0 && (
+        <div
+          data-ocid="employee_dash.today_summary.card"
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-b border-emerald-100 text-emerald-800"
+        >
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+          <span className="text-xs font-medium">
+            Bugün {todayMyVisitors} ziyaretçi kaydettiniz
+          </span>
+        </div>
+      )}
 
       <nav className="border-b border-border bg-white">
         <div className="flex px-4 overflow-x-auto">
@@ -178,7 +327,10 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
           <VisitorList companyId={company.companyId} canCheckout={true} />
         )}
         {tab === "employees" && canManageEmployees && (
-          <EmployeeManager companyId={company.companyId} />
+          <EmployeeManager
+            companyId={company.companyId}
+            currentEmployeeId={employee.employeeId}
+          />
         )}
         {tab === "stats" && canViewStats && (
           <div className="p-6 max-w-2xl space-y-6">
@@ -250,11 +402,162 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     </div>
                   </div>
                 )}
+
+                {frequentVisitors.length > 0 && (
+                  <div
+                    data-ocid="employee_dash.frequent_visitors.section"
+                    className="bg-white border border-border rounded-2xl p-5"
+                  >
+                    <div className="flex items-center gap-2 mb-4">
+                      <Repeat2 className="w-4 h-4 text-violet-500" />
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Sık Gelen Ziyaretçiler
+                      </h3>
+                    </div>
+                    <div className="space-y-2.5">
+                      {frequentVisitors.map((item, i) => (
+                        <div
+                          key={`${item.name}-${item.surname}`}
+                          data-ocid={`employee_dash.frequent_visitor.item.${i + 1}`}
+                          className="flex items-center gap-3"
+                        >
+                          <span className="w-6 h-6 rounded-full bg-violet-50 flex items-center justify-center text-xs font-bold text-violet-600">
+                            {i + 1}
+                          </span>
+                          <span className="flex-1 text-sm text-foreground truncate">
+                            {item.name} {item.surname}
+                          </span>
+                          <span className="text-sm font-semibold text-violet-600">
+                            {item.count} ziyaret
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
       </main>
+
+      {/* PIN Change Modal */}
+      {showPinModal && (
+        <div
+          data-ocid="employee_dash.pin_modal.dialog"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        >
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4 text-emerald-600" />
+                </div>
+                <h3 className="font-display font-semibold text-foreground text-sm">
+                  PIN Değiştir
+                </h3>
+              </div>
+              <button
+                type="button"
+                data-ocid="employee_dash.pin_modal.close_button"
+                onClick={() => {
+                  setShowPinModal(false);
+                  setNewPin("");
+                  setNewPinConfirm("");
+                  setPinError("");
+                }}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              PIN belirledikten sonra giriş yapan her personelin PIN doğrulaması
+              istenir.
+            </p>
+            <form onSubmit={handlePinSave} className="space-y-4">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="pin-new"
+                  className="block text-sm font-medium text-foreground"
+                >
+                  Yeni PIN (4-6 rakam)
+                </label>
+                <input
+                  id="pin-new"
+                  data-ocid="employee_dash.pin_modal.input"
+                  type="password"
+                  inputMode="numeric"
+                  value={newPin}
+                  onChange={(e) => {
+                    setNewPin(e.target.value);
+                    setPinError("");
+                  }}
+                  placeholder="••••"
+                  maxLength={6}
+                  className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono text-center tracking-widest bg-white text-foreground"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="pin-confirm"
+                  className="block text-sm font-medium text-foreground"
+                >
+                  PIN Tekrar
+                </label>
+                <input
+                  id="pin-confirm"
+                  data-ocid="employee_dash.pin_modal.textarea"
+                  type="password"
+                  inputMode="numeric"
+                  value={newPinConfirm}
+                  onChange={(e) => {
+                    setNewPinConfirm(e.target.value);
+                    setPinError("");
+                  }}
+                  placeholder="••••"
+                  maxLength={6}
+                  className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono text-center tracking-widest bg-white text-foreground"
+                />
+              </div>
+              {pinError && (
+                <p
+                  data-ocid="employee_dash.pin_modal.error_state"
+                  className="text-xs text-red-600"
+                >
+                  {pinError}
+                </p>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  data-ocid="employee_dash.pin_modal.cancel_button"
+                  onClick={() => {
+                    setShowPinModal(false);
+                    setNewPin("");
+                    setNewPinConfirm("");
+                    setPinError("");
+                  }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  data-ocid="employee_dash.pin_modal.save_button"
+                  disabled={pinSaving}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-emerald-700 text-white hover:bg-emerald-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {pinSaving && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  {pinSaving ? "Kaydediliyor..." : "Kaydet"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

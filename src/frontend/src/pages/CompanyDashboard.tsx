@@ -2,15 +2,23 @@ import {
   BarChart3,
   Building2,
   Calendar,
+  Check,
+  Clipboard,
+  ImagePlus,
+  Loader2,
   LogOut,
   Medal,
+  Pencil,
+  Repeat2,
   TrendingUp,
   Users,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Screen } from "../App";
 import EmployeeManager from "../components/EmployeeManager";
+import PurposeDistributionChart from "../components/PurposeDistributionChart";
 import VisitorList from "../components/VisitorList";
 import WeeklyVisitorChart from "../components/WeeklyVisitorChart";
 import { backend } from "../lib/backendSingleton";
@@ -19,7 +27,7 @@ interface Props {
   onNavigate: (screen: Screen) => void;
 }
 
-type Tab = "visitors" | "employees" | "stats";
+type Tab = "visitors" | "employees" | "stats" | "info";
 
 interface Company {
   companyId: string;
@@ -38,6 +46,9 @@ interface Stats {
 
 interface Visitor {
   entryTime: bigint;
+  tcId: string;
+  name: string;
+  surname: string;
   [key: string]: unknown;
 }
 
@@ -47,6 +58,20 @@ export default function CompanyDashboard({ onNavigate }: Props) {
   const [stats, setStats] = useState<Stats | null>(null);
   const [topPersons, setTopPersons] = useState<[string, bigint][]>([]);
   const [chartVisitors, setChartVisitors] = useState<Visitor[]>([]);
+  const [purposeDist, setPurposeDist] = useState<[string, bigint][]>([]);
+  const [copied, setCopied] = useState(false);
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoSaving, setLogoSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Profile edit modal
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editSector, setEditSector] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editContact, setEditContact] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
 
   useEffect(() => {
     const data = sessionStorage.getItem("safentry_company");
@@ -54,7 +79,18 @@ export default function CompanyDashboard({ onNavigate }: Props) {
       onNavigate("landing");
       return;
     }
-    setCompany(JSON.parse(data) as Company);
+    const parsed = JSON.parse(data) as Company;
+    setCompany(parsed);
+    // Load company logo on mount
+    backend
+      .getCompanyLogo(parsed.loginCode)
+      .then((logo) => {
+        if (logo) {
+          setCompanyLogo(logo);
+          setLogoPreview(logo);
+        }
+      })
+      .catch(() => {});
   }, [onNavigate]);
 
   const loadStats = useCallback((c: Company) => {
@@ -73,6 +109,10 @@ export default function CompanyDashboard({ onNavigate }: Props) {
         .getVisitorsAsCompany(c.loginCode)
         .then((r) => setChartVisitors(r as unknown as Visitor[]))
         .catch(() => {}),
+      backend
+        .getPurposeDistributionAsCompany(c.loginCode)
+        .then((r) => setPurposeDist(r as [string, bigint][]))
+        .catch(() => {}),
     ]);
   }, []);
 
@@ -87,14 +127,127 @@ export default function CompanyDashboard({ onNavigate }: Props) {
     onNavigate("landing");
   };
 
+  const copyLoginCode = async () => {
+    if (!company) return;
+    try {
+      await navigator.clipboard.writeText(company.loginCode);
+      setCopied(true);
+      toast.success("Giriş kodu kopyalandı");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Kopyalanamadı");
+    }
+  };
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Lütfen geçerli bir görsel dosyası seçin");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      setLogoPreview(result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoSave = async () => {
+    if (!company || !logoPreview) return;
+    setLogoSaving(true);
+    try {
+      await backend.setCompanyLogo(company.loginCode, logoPreview);
+      setCompanyLogo(logoPreview);
+      toast.success("Logo kaydedildi");
+    } catch {
+      toast.error("Logo kaydedilemedi");
+    } finally {
+      setLogoSaving(false);
+    }
+  };
+
+  const openProfileEdit = () => {
+    if (!company) return;
+    setEditName(company.name);
+    setEditSector(company.sector);
+    setEditAddress(company.address);
+    setEditContact(company.contactPersonName);
+    setShowProfileModal(true);
+  };
+
+  const handleProfileSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!company) return;
+    if (!editName || !editSector || !editAddress || !editContact) {
+      toast.error("Tüm alanları doldurun");
+      return;
+    }
+    setProfileSaving(true);
+    try {
+      await backend.updateCompanyProfile(
+        company.loginCode,
+        editName,
+        editSector,
+        editAddress,
+        editContact,
+      );
+      const updated: Company = {
+        ...company,
+        name: editName,
+        sector: editSector,
+        address: editAddress,
+        contactPersonName: editContact,
+      };
+      setCompany(updated);
+      sessionStorage.setItem("safentry_company", JSON.stringify(updated));
+      toast.success("Şirket profili güncellendi");
+      setShowProfileModal(false);
+    } catch {
+      toast.error("Profil güncellenemedi");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   if (!company) return null;
+
+  // Compute frequent visitors (top 5 with count > 1)
+  const frequentVisitors = (() => {
+    const map = new Map<
+      string,
+      { name: string; surname: string; count: number }
+    >();
+    for (const v of chartVisitors) {
+      if (!v.tcId) continue;
+      const existing = map.get(v.tcId);
+      if (existing) {
+        existing.count++;
+      } else {
+        map.set(v.tcId, { name: v.name, surname: v.surname, count: 1 });
+      }
+    }
+    return Array.from(map.values())
+      .filter((item) => item.count > 1)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  })();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="bg-white border-b border-border px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Building2 className="w-4 h-4 text-primary" />
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+            {companyLogo ? (
+              <img
+                src={companyLogo}
+                alt={company.name}
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <Building2 className="w-4 h-4 text-primary" />
+            )}
           </div>
           <div>
             <div className="font-display font-semibold text-foreground text-sm">
@@ -138,6 +291,13 @@ export default function CompanyDashboard({ onNavigate }: Props) {
             ocid="company_dash.stats.tab"
             icon={<BarChart3 className="w-4 h-4" />}
             label="İstatistikler"
+          />
+          <TabBtn
+            active={tab === "info"}
+            onClick={() => setTab("info")}
+            ocid="company_dash.info.tab"
+            icon={<Building2 className="w-4 h-4" />}
+            label="Bilgiler"
           />
         </div>
       </nav>
@@ -191,6 +351,10 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                   <WeeklyVisitorChart visitors={chartVisitors} />
                 </div>
 
+                {purposeDist.length > 0 && (
+                  <PurposeDistributionChart data={purposeDist} />
+                )}
+
                 {topPersons.length > 0 && (
                   <div className="bg-white border border-border rounded-2xl p-5">
                     <div className="flex items-center gap-2 mb-4">
@@ -220,11 +384,286 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                     </div>
                   </div>
                 )}
+
+                {frequentVisitors.length > 0 && (
+                  <div
+                    data-ocid="company_dash.frequent_visitors.section"
+                    className="bg-white border border-border rounded-2xl p-5"
+                  >
+                    <div className="flex items-center gap-2 mb-4">
+                      <Repeat2 className="w-4 h-4 text-violet-500" />
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Sık Gelen Ziyaretçiler
+                      </h3>
+                    </div>
+                    <div className="space-y-2.5">
+                      {frequentVisitors.map((item, i) => (
+                        <div
+                          key={`${item.name}-${item.surname}`}
+                          data-ocid={`company_dash.frequent_visitor.item.${i + 1}`}
+                          className="flex items-center gap-3"
+                        >
+                          <span className="w-6 h-6 rounded-full bg-violet-50 flex items-center justify-center text-xs font-bold text-violet-600">
+                            {i + 1}
+                          </span>
+                          <span className="flex-1 text-sm text-foreground truncate">
+                            {item.name} {item.surname}
+                          </span>
+                          <span className="text-sm font-semibold text-violet-600">
+                            {item.count} ziyaret
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
+        {tab === "info" && (
+          <div
+            data-ocid="company_dash.info.section"
+            className="p-6 max-w-lg space-y-4"
+          >
+            {/* Logo Upload Section */}
+            <div className="bg-white border border-border rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <ImagePlus className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Şirket Logosu
+                </h3>
+              </div>
+
+              <div className="flex items-start gap-5">
+                {/* Logo preview */}
+                <div
+                  data-ocid="company_dash.logo.card"
+                  className="w-20 h-20 rounded-xl border-2 border-dashed border-border flex items-center justify-center overflow-hidden bg-muted/40 flex-shrink-0"
+                >
+                  {logoPreview ? (
+                    <img
+                      src={logoPreview}
+                      alt="Şirket logosu"
+                      className="w-full h-full object-contain p-1"
+                    />
+                  ) : (
+                    <Building2 className="w-7 h-7 text-muted-foreground/40" />
+                  )}
+                </div>
+
+                <div className="flex-1 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Logo, ziyaretçi belgesinde ve panel başlığında görünür. PNG,
+                    JPG veya SVG önerilir.
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleLogoFileChange}
+                    data-ocid="company_dash.logo.upload_button"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      data-ocid="company_dash.logo.secondary_button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-xs px-3 py-2 rounded-lg border border-border bg-muted hover:bg-muted/80 text-foreground font-medium transition-colors"
+                    >
+                      Dosya Seç
+                    </button>
+                    {logoPreview && (
+                      <button
+                        type="button"
+                        data-ocid="company_dash.logo.save_button"
+                        onClick={handleLogoSave}
+                        disabled={logoSaving || logoPreview === companyLogo}
+                        className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                      >
+                        {logoSaving ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : logoPreview === companyLogo ? (
+                          <Check className="w-3 h-3" />
+                        ) : null}
+                        {logoSaving
+                          ? "Kaydediliyor..."
+                          : logoPreview === companyLogo
+                            ? "Kaydedildi"
+                            : "Logo Kaydet"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Company Info */}
+            <div className="bg-white border border-border rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Şirket Bilgileri
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  data-ocid="company_dash.profile.edit_button"
+                  onClick={openProfileEdit}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-border text-foreground hover:bg-muted transition-colors font-medium"
+                >
+                  <Pencil className="w-3 h-3" />
+                  Profili Düzenle
+                </button>
+              </div>
+              <InfoRow label="Şirket Adı" value={company.name} />
+              <InfoRow label="Sektör" value={company.sector} />
+              <InfoRow label="Adres" value={company.address} />
+              <InfoRow label="Yetkili Kişi" value={company.contactPersonName} />
+            </div>
+
+            {/* Login Code */}
+            <div className="bg-white border border-border rounded-2xl p-5">
+              <h3 className="text-sm font-semibold text-foreground mb-3">
+                Giriş Kodu
+              </h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Bu kodu personellerinizle paylaşarak sisteme giriş yapmalarını
+                sağlayabilirsiniz.
+              </p>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-muted rounded-lg px-3 py-2 font-mono text-sm tracking-widest text-foreground select-all">
+                  {company.loginCode}
+                </div>
+                <button
+                  type="button"
+                  data-ocid="company_dash.copy_login_code.button"
+                  onClick={copyLoginCode}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+                >
+                  {copied ? (
+                    <Check className="w-3.5 h-3.5" />
+                  ) : (
+                    <Clipboard className="w-3.5 h-3.5" />
+                  )}
+                  {copied ? "Kopyalandı" : "Kopyala"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
+
+      {/* Profile Edit Modal */}
+      {showProfileModal && (
+        <div
+          data-ocid="company_dash.profile.dialog"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        >
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full mx-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Pencil className="w-4 h-4 text-primary" />
+                </div>
+                <h3 className="font-display font-semibold text-foreground text-sm">
+                  Şirket Profilini Düzenle
+                </h3>
+              </div>
+              <button
+                type="button"
+                data-ocid="company_dash.profile.close_button"
+                onClick={() => setShowProfileModal(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleProfileSave} className="space-y-3">
+              {[
+                {
+                  id: "edit-name",
+                  label: "Şirket Adı",
+                  value: editName,
+                  setter: setEditName,
+                  ocid: "company_dash.profile.name.input",
+                },
+                {
+                  id: "edit-sector",
+                  label: "Sektör",
+                  value: editSector,
+                  setter: setEditSector,
+                  ocid: "company_dash.profile.sector.input",
+                },
+                {
+                  id: "edit-address",
+                  label: "Adres",
+                  value: editAddress,
+                  setter: setEditAddress,
+                  ocid: "company_dash.profile.address.input",
+                },
+                {
+                  id: "edit-contact",
+                  label: "Yetkili Kişi",
+                  value: editContact,
+                  setter: setEditContact,
+                  ocid: "company_dash.profile.contact.input",
+                },
+              ].map((f) => (
+                <div key={f.id} className="space-y-1">
+                  <label
+                    htmlFor={f.id}
+                    className="block text-xs font-medium text-foreground"
+                  >
+                    {f.label}
+                  </label>
+                  <input
+                    id={f.id}
+                    data-ocid={f.ocid}
+                    value={f.value}
+                    onChange={(e) => f.setter(e.target.value)}
+                    className="w-full border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white text-foreground"
+                  />
+                </div>
+              ))}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  data-ocid="company_dash.profile.cancel_button"
+                  onClick={() => setShowProfileModal(false)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  data-ocid="company_dash.profile.save_button"
+                  disabled={profileSaving}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {profileSaving && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  {profileSaving ? "Kaydediliyor..." : "Kaydet"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm text-foreground font-medium">
+        {value || "—"}
+      </span>
     </div>
   );
 }

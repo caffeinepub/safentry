@@ -1,4 +1,4 @@
-import { Trash2, UserPlus } from "lucide-react";
+import { AlertTriangle, Trash2, UserPlus, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmployeeRole } from "../backend";
@@ -16,14 +16,20 @@ interface EmployeeEntry {
 
 interface Props {
   companyId: string;
+  currentEmployeeId?: string;
 }
 
-export default function EmployeeManager({ companyId }: Props) {
+export default function EmployeeManager({
+  companyId,
+  currentEmployeeId,
+}: Props) {
   const [list, setList] = useState<EmployeeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [addEmpId, setAddEmpId] = useState("");
   const [addRole, setAddRole] = useState<EmployeeRole>(EmployeeRole.registrar);
   const [adding, setAdding] = useState(false);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -57,13 +63,18 @@ export default function EmployeeManager({ companyId }: Props) {
     }
   };
 
-  const handleRemove = async (empId: string) => {
+  const handleRemoveConfirm = async () => {
+    if (!confirmRemoveId) return;
+    setRemoving(true);
     try {
-      await backend.removeEmployeeFromCompany(companyId, empId);
+      await backend.removeEmployeeFromCompany(companyId, confirmRemoveId);
       toast.success("Personel çıkarıldı");
+      setConfirmRemoveId(null);
       load();
     } catch {
       toast.error("İşlem başarısız");
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -76,6 +87,10 @@ export default function EmployeeManager({ companyId }: Props) {
       toast.error("Rol güncellenemedi");
     }
   };
+
+  const confirmEntry = confirmRemoveId
+    ? list.find((e) => e.employee.employeeId === confirmRemoveId)
+    : null;
 
   return (
     <div className="p-4 max-w-xl">
@@ -164,18 +179,77 @@ export default function EmployeeManager({ companyId }: Props) {
                 <option value={EmployeeRole.authorized}>Yetkili</option>
                 <option value={EmployeeRole.owner}>Sahip</option>
               </select>
-              <button
-                type="button"
-                data-ocid={`emp_manager.delete.button.${i + 1}`}
-                onClick={() => handleRemove(e.employee.employeeId)}
-                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {e.employee.employeeId !== currentEmployeeId && (
+                <button
+                  type="button"
+                  data-ocid={`emp_manager.delete_button.${i + 1}`}
+                  onClick={() => setConfirmRemoveId(e.employee.employeeId)}
+                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Şirketten çıkar"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         ))}
       </div>
+
+      {/* Confirm Remove Dialog */}
+      {confirmRemoveId && (
+        <div
+          data-ocid="emp_manager.dialog"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        >
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground text-sm">
+                  Personeli Çıkar
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  <strong>
+                    {confirmEntry?.employee.name}{" "}
+                    {confirmEntry?.employee.surname}
+                  </strong>{" "}
+                  adlı personeli şirketten çıkarmak istediğinizden emin misiniz?
+                  Bu işlem geri alınamaz.
+                </p>
+              </div>
+              <button
+                type="button"
+                data-ocid="emp_manager.close_button"
+                onClick={() => setConfirmRemoveId(null)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors flex-shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                data-ocid="emp_manager.cancel_button"
+                onClick={() => setConfirmRemoveId(null)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                data-ocid="emp_manager.confirm_button"
+                onClick={handleRemoveConfirm}
+                disabled={removing}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {removing ? "Çıkarılıyor..." : "Evet, Çıkar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

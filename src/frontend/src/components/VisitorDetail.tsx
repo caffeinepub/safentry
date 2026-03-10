@@ -1,4 +1,13 @@
-import { Clock, FileText, LogOut, Phone, Printer, User, X } from "lucide-react";
+import {
+  Car,
+  Clock,
+  FileText,
+  LogOut,
+  Phone,
+  Printer,
+  User,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { backend } from "../lib/backendSingleton";
@@ -12,6 +21,7 @@ interface Visitor {
   phone: string;
   visitingPerson: string;
   visitPurpose: string;
+  vehiclePlate?: string;
   entryTime: bigint;
   exitTime?: bigint;
   documentCode: string;
@@ -225,11 +235,19 @@ export default function VisitorDetail({
                   label="Kime Geldi"
                   value={visitor.visitingPerson}
                 />
+                {visitor.vehiclePlate && (
+                  <InfoCard
+                    icon={<Car className="w-4 h-4" />}
+                    label="Araç Plakası"
+                    value={visitor.vehiclePlate}
+                    mono
+                  />
+                )}
                 <InfoCard
                   icon={<FileText className="w-4 h-4" />}
                   label="Ziyaret Amacı"
                   value={visitor.visitPurpose}
-                  fullWidth
+                  fullWidth={!visitor.vehiclePlate}
                 />
                 <InfoCard
                   icon={<Clock className="w-4 h-4" />}
@@ -356,6 +374,9 @@ export default function VisitorDetail({
                 />
                 <PrintRow label="TC Kimlik No" value={visitor.tcId || "—"} />
                 <PrintRow label="Telefon" value={visitor.phone} />
+                {visitor.vehiclePlate && (
+                  <PrintRow label="Araç Plakası" value={visitor.vehiclePlate} />
+                )}
                 <PrintRow label="Kime Geldi" value={visitor.visitingPerson} />
                 <PrintRow label="Ziyaret Amacı" value={visitor.visitPurpose} />
                 <PrintRow label="Giriş Saati" value={fmt(visitor.entryTime)} />

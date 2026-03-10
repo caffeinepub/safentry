@@ -19,12 +19,20 @@ interface Visitor {
   phone: string;
   visitingPerson: string;
   visitPurpose: string;
+  vehiclePlate?: string;
   entryTime: bigint;
   exitTime?: bigint;
   documentCode: string;
   signatureData: string;
   companyId: string;
   createdBy: string;
+}
+
+interface Employee {
+  employeeId: string;
+  name: string;
+  surname: string;
+  createdAt: bigint;
 }
 
 interface Props {
@@ -40,9 +48,11 @@ export default function VisitorList({
   loginCode,
 }: Props) {
   const [visitors, setVisitors] = useState<Visitor[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "past">("all");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showDateFilter, setShowDateFilter] = useState(false);
@@ -63,6 +73,21 @@ export default function VisitorList({
   useEffect(() => {
     load();
   }, [load]);
+
+  // Load employees for employee filter (only in employee panel context)
+  useEffect(() => {
+    if (!canCheckout) return;
+    backend
+      .getCompanyEmployees(companyId)
+      .then((list) => {
+        setEmployees(
+          (list as { employee: Employee; role: unknown }[]).map(
+            (item) => item.employee,
+          ),
+        );
+      })
+      .catch(() => {});
+  }, [companyId, canCheckout]);
 
   const handleCheckout = async (e: React.MouseEvent, visitorId: string) => {
     e.stopPropagation();
@@ -90,6 +115,8 @@ export default function VisitorList({
       filter === "all" ||
       (filter === "active" && !v.exitTime) ||
       (filter === "past" && !!v.exitTime);
+    const matchEmployee =
+      selectedEmployeeId === "all" || v.createdBy === selectedEmployeeId;
 
     let matchDate = true;
     if (dateFrom) {
@@ -101,7 +128,7 @@ export default function VisitorList({
       matchDate = matchDate && Number(v.entryTime) <= to;
     }
 
-    return matchSearch && matchFilter && matchDate;
+    return matchSearch && matchFilter && matchEmployee && matchDate;
   });
 
   const fmt = (ts: bigint) =>
@@ -112,6 +139,7 @@ export default function VisitorList({
       "Ad Soyad",
       "TC No",
       "Telefon",
+      "Araç Plakası",
       "Ziyaret Edilen",
       "Amaç",
       "Giriş Zamanı",
@@ -123,6 +151,7 @@ export default function VisitorList({
       `${v.name} ${v.surname}`,
       v.tcId,
       v.phone,
+      v.vehiclePlate || "",
       v.visitingPerson,
       v.visitPurpose,
       fmt(v.entryTime),
@@ -212,6 +241,37 @@ export default function VisitorList({
           </button>
         </div>
 
+        {/* Employee filter — only in employee panel (canCheckout=true) */}
+        {canCheckout && employees.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              Personel:
+            </span>
+            <select
+              data-ocid="visitor_list.employee_filter.select"
+              value={selectedEmployeeId}
+              onChange={(e) => setSelectedEmployeeId(e.target.value)}
+              className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none bg-white text-foreground"
+            >
+              <option value="all">Tüm Personel</option>
+              {employees.map((emp) => (
+                <option key={emp.employeeId} value={emp.employeeId}>
+                  {emp.name} {emp.surname}
+                </option>
+              ))}
+            </select>
+            {selectedEmployeeId !== "all" && (
+              <button
+                type="button"
+                onClick={() => setSelectedEmployeeId("all")}
+                className="text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-lg hover:bg-muted transition-colors whitespace-nowrap"
+              >
+                Temizle
+              </button>
+            )}
+          </div>
+        )}
+
         {showDateFilter && (
           <div className="flex gap-2 items-center bg-muted/50 border border-border rounded-xl p-3">
             <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -253,7 +313,13 @@ export default function VisitorList({
       {!loading && (
         <div className="text-xs text-muted-foreground mb-3">
           {filtered.length} ziyaretçi{" "}
-          {filter !== "all" || search || dateFrom || dateTo ? "(filtreli)" : ""}
+          {filter !== "all" ||
+          search ||
+          dateFrom ||
+          dateTo ||
+          selectedEmployeeId !== "all"
+            ? "(filtreli)"
+            : ""}
         </div>
       )}
 
@@ -310,6 +376,7 @@ export default function VisitorList({
                 </div>
                 <div className="text-xs text-muted-foreground mt-1 truncate">
                   {v.visitingPerson} · {v.visitPurpose}
+                  {v.vehiclePlate && ` · ${v.vehiclePlate}`}
                 </div>
                 <div className="text-xs text-muted-foreground/70 mt-0.5">
                   Giriş: {fmt(v.entryTime)}

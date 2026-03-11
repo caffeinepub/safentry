@@ -16,11 +16,13 @@ interface EmployeeEntry {
 
 interface Props {
   companyId: string;
+  loginCode?: string;
   currentEmployeeId?: string;
 }
 
 export default function EmployeeManager({
   companyId,
+  loginCode,
   currentEmployeeId,
 }: Props) {
   const [list, setList] = useState<EmployeeEntry[]>([]);
@@ -33,12 +35,14 @@ export default function EmployeeManager({
 
   const load = useCallback(() => {
     setLoading(true);
-    backend
-      .getCompanyEmployees(companyId)
+    const promise = loginCode
+      ? backend.getCompanyEmployeesAsCompany(loginCode)
+      : backend.getCompanyEmployees(companyId);
+    promise
       .then((r) => setList(r as EmployeeEntry[]))
       .catch(() => toast.error("Personel listesi yüklenemedi"))
       .finally(() => setLoading(false));
-  }, [companyId]);
+  }, [loginCode, companyId]);
 
   useEffect(() => {
     load();
@@ -52,12 +56,16 @@ export default function EmployeeManager({
     }
     setAdding(true);
     try {
-      await backend.addEmployeeToCompany(companyId, addEmpId.trim(), addRole);
+      await backend.addEmployeeToCompanyAsCompany(
+        loginCode!,
+        addEmpId.trim(),
+        addRole,
+      );
       toast.success("Personel eklendi");
       setAddEmpId("");
       load();
     } catch {
-      toast.error("Personel eklenemedi");
+      toast.error("Personel eklenemedi. Personel kodu geçersiz olabilir.");
     } finally {
       setAdding(false);
     }
@@ -67,7 +75,10 @@ export default function EmployeeManager({
     if (!confirmRemoveId) return;
     setRemoving(true);
     try {
-      await backend.removeEmployeeFromCompany(companyId, confirmRemoveId);
+      await backend.removeEmployeeFromCompanyAsCompany(
+        loginCode!,
+        confirmRemoveId,
+      );
       toast.success("Personel çıkarıldı");
       setConfirmRemoveId(null);
       load();
@@ -80,7 +91,11 @@ export default function EmployeeManager({
 
   const handleRoleChange = async (empId: string, role: EmployeeRole) => {
     try {
-      await backend.setEmployeeRole(companyId, empId, role);
+      if (loginCode) {
+        await backend.setEmployeeRoleAsCompany(loginCode, empId, role);
+      } else {
+        await backend.setEmployeeRole(companyId, empId, role);
+      }
       toast.success("Rol güncellendi");
       load();
     } catch {
@@ -94,41 +109,45 @@ export default function EmployeeManager({
 
   return (
     <div className="p-4 max-w-xl">
-      <form
-        onSubmit={handleAdd}
-        className="bg-white border rounded-xl p-4 mb-4 space-y-3"
-      >
-        <div className="text-sm font-medium text-slate-700">Personel Ekle</div>
-        <div className="flex gap-2">
-          <input
-            id="emp-id-input"
-            data-ocid="emp_manager.emp_id.input"
-            value={addEmpId}
-            onChange={(e) => setAddEmpId(e.target.value)}
-            placeholder="8 haneli personel kodu"
-            maxLength={8}
-            className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
-          />
-          <select
-            data-ocid="emp_manager.role.select"
-            value={addRole}
-            onChange={(e) => setAddRole(e.target.value as EmployeeRole)}
-            className="border border-slate-300 rounded-lg px-2 py-2 text-sm focus:outline-none"
-          >
-            <option value={EmployeeRole.registrar}>Kayıt Personeli</option>
-            <option value={EmployeeRole.authorized}>Yetkili</option>
-            <option value={EmployeeRole.owner}>Sahip</option>
-          </select>
-          <button
-            data-ocid="emp_manager.add.button"
-            type="submit"
-            disabled={adding}
-            className="bg-cyan-700 text-white px-3 py-2 rounded-lg hover:bg-cyan-800 transition-colors disabled:opacity-50"
-          >
-            <UserPlus className="w-4 h-4" />
-          </button>
-        </div>
-      </form>
+      {loginCode && (
+        <form
+          onSubmit={handleAdd}
+          className="bg-white border rounded-xl p-4 mb-4 space-y-3"
+        >
+          <div className="text-sm font-medium text-slate-700">
+            Personel Ekle
+          </div>
+          <div className="flex gap-2">
+            <input
+              id="emp-id-input"
+              data-ocid="emp_manager.emp_id.input"
+              value={addEmpId}
+              onChange={(e) => setAddEmpId(e.target.value)}
+              placeholder="8 haneli personel kodu"
+              maxLength={8}
+              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
+            />
+            <select
+              data-ocid="emp_manager.role.select"
+              value={addRole}
+              onChange={(e) => setAddRole(e.target.value as EmployeeRole)}
+              className="border border-slate-300 rounded-lg px-2 py-2 text-sm focus:outline-none"
+            >
+              <option value={EmployeeRole.registrar}>Kayıt Personeli</option>
+              <option value={EmployeeRole.authorized}>Yetkili</option>
+              <option value={EmployeeRole.owner}>Sahip</option>
+            </select>
+            <button
+              data-ocid="emp_manager.add.button"
+              type="submit"
+              disabled={adding}
+              className="bg-cyan-700 text-white px-3 py-2 rounded-lg hover:bg-cyan-800 transition-colors disabled:opacity-50"
+            >
+              <UserPlus className="w-4 h-4" />
+            </button>
+          </div>
+        </form>
+      )}
 
       {loading && (
         <div

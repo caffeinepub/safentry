@@ -13,9 +13,9 @@ import Option "mo:core/Option";
 import Char "mo:core/Char";
 import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
-import Migration "migration";
 
-(with migration = Migration.run)
+
+
 actor {
   // Access control system
   let accessControlState = AccessControl.initState();
@@ -713,6 +713,90 @@ actor {
     };
 
     purposeCounts.toArray();
+  };
+
+
+  public query ({ caller }) func getCompanyEmployeesAsCompany(loginCode : Text) : async [{ employee : Employee; role : EmployeeRole }] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+
+    var result : [{ employee : Employee; role : EmployeeRole }] = [];
+    let companyIdPrefix = companyId # "_";
+
+    for ((key, role) in companyEmployees.entries()) {
+      if (key.startsWith(#text companyIdPrefix)) {
+        let parts = key.split(#char '_').toArray();
+        if (parts.size() == 2) {
+          let employeeId = parts[1];
+          switch (employees.get(employeeId)) {
+            case (?employee) {
+              result := result.concat([{ employee; role }]);
+            };
+            case (null) {};
+          };
+        };
+      };
+    };
+    result;
+  };
+
+  public shared ({ caller }) func addEmployeeToCompanyAsCompany(loginCode : Text, employeeId : Text, role : EmployeeRole) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+
+    switch (employees.get(employeeId)) {
+      case (?_) {
+        let key = getCombinedKey(companyId, employeeId);
+        companyEmployees.add(key, role);
+      };
+      case (null) { Runtime.trap("Employee not found") };
+    };
+  };
+
+  public shared ({ caller }) func removeEmployeeFromCompanyAsCompany(loginCode : Text, targetEmployeeId : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+
+    let key = getCombinedKey(companyId, targetEmployeeId);
+    if (not companyEmployees.containsKey(key)) {
+      Runtime.trap("Employee not found in company");
+    };
+    companyEmployees.remove(key);
+  };
+
+  public shared ({ caller }) func setEmployeeRoleAsCompany(loginCode : Text, targetEmployeeId : Text, role : EmployeeRole) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+
+    let key = getCombinedKey(companyId, targetEmployeeId);
+    if (not companyEmployees.containsKey(key)) {
+      Runtime.trap("Employee not found in company");
+    };
+    companyEmployees.add(key, role);
   };
 
   // Helper functions for new features

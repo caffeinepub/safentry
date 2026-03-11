@@ -1,11 +1,13 @@
 import { Building2, ExternalLink, Search, Shield, UserCog } from "lucide-react";
 import type { Screen } from "../App";
+import { useLanguage } from "../i18n/LanguageContext";
 
 interface Props {
   onNavigate: (screen: Screen) => void;
 }
 
 export default function Landing({ onNavigate }: Props) {
+  const { t } = useLanguage();
   const year = new Date().getFullYear();
   const utmLink = `https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(typeof window !== "undefined" ? window.location.hostname : "")}`;
 
@@ -14,7 +16,6 @@ export default function Landing({ onNavigate }: Props) {
       className="min-h-screen flex flex-col"
       style={{ background: "oklch(0.14 0.030 265)" }}
     >
-      {/* Geometric background decoration */}
       <div
         className="absolute inset-0 overflow-hidden pointer-events-none"
         aria-hidden="true"
@@ -27,7 +28,6 @@ export default function Landing({ onNavigate }: Props) {
           className="absolute bottom-0 -left-24 w-[400px] h-[400px] rounded-full opacity-[0.03]"
           style={{ background: "oklch(0.62 0.18 205)" }}
         />
-        {/* Decorative grid */}
         <svg
           aria-hidden="true"
           role="presentation"
@@ -55,7 +55,6 @@ export default function Landing({ onNavigate }: Props) {
       </div>
 
       <main className="relative flex-1 flex flex-col items-center justify-center px-6 py-16">
-        {/* Brand mark */}
         <div className="mb-3 flex items-center gap-2">
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -71,10 +70,9 @@ export default function Landing({ onNavigate }: Props) {
           <span style={{ color: "oklch(0.62 0.18 205)" }}>Safe</span>ntry
         </h1>
         <p className="text-sm mb-12" style={{ color: "oklch(0.65 0.03 265)" }}>
-          Kurumsal Ziyaretçi Giriş Takip Sistemi
+          {t("app.subtitle")}
         </p>
 
-        {/* Action cards */}
         <div className="grid gap-3 w-full max-w-sm">
           <button
             type="button"
@@ -103,13 +101,13 @@ export default function Landing({ onNavigate }: Props) {
             </div>
             <div>
               <div className="font-display font-semibold text-white text-sm">
-                İşyeri Kayıt / Giriş
+                {t("landing.company_auth")}
               </div>
               <div
                 className="text-xs mt-0.5"
                 style={{ color: "oklch(0.55 0.02 265)" }}
               >
-                Şirket hesabı oluşturun veya giriş yapın
+                {t("landing.company_auth_desc")}
               </div>
             </div>
           </button>
@@ -141,13 +139,13 @@ export default function Landing({ onNavigate }: Props) {
             </div>
             <div>
               <div className="font-display font-semibold text-white text-sm">
-                Personel Kayıt / Giriş
+                {t("landing.employee_auth")}
               </div>
               <div
                 className="text-xs mt-0.5"
                 style={{ color: "oklch(0.55 0.02 265)" }}
               >
-                Personel hesabı oluşturun veya giriş yapın
+                {t("landing.employee_auth_desc")}
               </div>
             </div>
           </button>
@@ -179,13 +177,13 @@ export default function Landing({ onNavigate }: Props) {
             </div>
             <div>
               <div className="font-display font-semibold text-white text-sm">
-                Belge Sorgulama
+                {t("landing.document_verify")}
               </div>
               <div
                 className="text-xs mt-0.5"
                 style={{ color: "oklch(0.55 0.02 265)" }}
               >
-                Ziyaret belgesi doğrulayın
+                {t("landing.document_verify_desc")}
               </div>
             </div>
           </button>

@@ -107,6 +107,10 @@ export interface _SERVICE {
     [string, string, EmployeeRole],
     undefined
   >,
+  'addEmployeeToCompanyAsCompany' : ActorMethod<
+    [string, string, EmployeeRole],
+    undefined
+  >,
   'addVisitorBlacklist' : ActorMethod<[string, string, string], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'cancelInvite' : ActorMethod<[string, string], undefined>,
@@ -124,6 +128,10 @@ export interface _SERVICE {
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getCompanyBlacklist' : ActorMethod<[string], Array<BlacklistEntry>>,
   'getCompanyEmployees' : ActorMethod<
+    [string],
+    Array<{ 'role' : EmployeeRole, 'employee' : Employee }>
+  >,
+  'getCompanyEmployeesAsCompany' : ActorMethod<
     [string],
     Array<{ 'role' : EmployeeRole, 'employee' : Employee }>
   >,
@@ -186,11 +194,13 @@ export interface _SERVICE {
     string
   >,
   'removeEmployeeFromCompany' : ActorMethod<[string, string], undefined>,
+  'removeEmployeeFromCompanyAsCompany' : ActorMethod<[string, string], undefined>,
   'removeVisitorBlacklist' : ActorMethod<[string, string], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'setCompanyLogo' : ActorMethod<[string, string], undefined>,
   'setEmployeePin' : ActorMethod<[string, string], undefined>,
   'setEmployeeRole' : ActorMethod<[string, string, EmployeeRole], undefined>,
+  'setEmployeeRoleAsCompany' : ActorMethod<[string, string, EmployeeRole], undefined>,
   'submitInviteInfo' : ActorMethod<
     [string, string, string, string, string],
     undefined

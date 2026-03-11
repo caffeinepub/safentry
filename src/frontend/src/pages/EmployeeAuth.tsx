@@ -63,7 +63,6 @@ export default function EmployeeAuth({ onNavigate }: Props) {
   const [empCode, setEmpCode] = useState("");
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
-  const [manualCompanyId, setManualCompanyId] = useState("");
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState("");
   const [lockMessage, setLockMessage] = useState<string | null>(null);
@@ -189,27 +188,6 @@ export default function EmployeeAuth({ onNavigate }: Props) {
     );
     sessionStorage.setItem("safentry_employee_role", role);
     onNavigate("employee-dashboard");
-  };
-
-  const handleManualCompany = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualCompanyId.trim() || !employeeData) return;
-    setLoading(true);
-    try {
-      const myCompanies = await backend.getMyCompanies(employeeData.employeeId);
-      const found = myCompanies.find(
-        ([c]) => c.companyId === manualCompanyId.trim(),
-      );
-      if (!found) {
-        toast.error("Bu şirkette kaydınız bulunamadı.");
-        return;
-      }
-      selectCompany(found[0].companyId, found[0].name, found[1]);
-    } catch {
-      toast.error("Hata oluştu");
-    } finally {
-      setLoading(false);
-    }
   };
 
   // PIN verify step
@@ -345,39 +323,11 @@ export default function EmployeeAuth({ onNavigate }: Props) {
           ) : (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
               <p className="text-sm text-amber-800">
-                Henüz hiçbir şirkete bağlı değilsiniz. Şirket kodunuzu girerek
-                bağlanabilirsiniz.
+                Henüz hiçbir şirkete bağlı değilsiniz. Şirket yöneticisinden
+                sizi sisteme eklemesini isteyin.
               </p>
             </div>
           )}
-          <form
-            onSubmit={handleManualCompany}
-            className="bg-white border border-border rounded-2xl p-4 space-y-3"
-          >
-            <label
-              htmlFor="ea-company-code"
-              className="text-sm font-medium text-foreground"
-            >
-              Şirket Kodu ile Giriş
-            </label>
-            <input
-              id="ea-company-code"
-              data-ocid="employee_auth.company_code.input"
-              value={manualCompanyId}
-              onChange={(e) => setManualCompanyId(e.target.value)}
-              placeholder="11 haneli şirket kodu"
-              maxLength={11}
-              className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono bg-white text-foreground placeholder:text-muted-foreground"
-            />
-            <button
-              data-ocid="employee_auth.company_code.submit_button"
-              type="submit"
-              disabled={loading}
-              className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-            >
-              {loading ? "Kontrol ediliyor..." : "Giriş Yap"}
-            </button>
-          </form>
         </div>
       </div>
     );

@@ -3,6 +3,7 @@ import {
   Bell,
   BookOpen,
   Calendar,
+  Check,
   CheckCircle2,
   Clock,
   Copy,
@@ -15,7 +16,10 @@ import {
   Plus,
   Repeat2,
   Shield,
+  SmilePlus,
+  Star,
   TrendingUp,
+  Upload,
   UserPlus,
   Users,
   X,
@@ -44,7 +48,8 @@ type Tab =
   | "employees"
   | "stats"
   | "davetler"
-  | "kayitlar";
+  | "kayitlar"
+  | "sira";
 
 interface Visitor {
   entryTime: bigint;
@@ -86,6 +91,20 @@ const VISIT_PURPOSES = [
 
 export default function EmployeeDashboard({ onNavigate }: Props) {
   const [tab, setTab] = useState<Tab>("register");
+
+  // Queue Management State
+  interface QueueEntry {
+    id: string;
+    number: number;
+    name: string;
+    purpose: string;
+    status: "waiting" | "called";
+    addedAt: Date;
+  }
+  const [queue, setQueue] = useState<QueueEntry[]>([]);
+  const [queueCounter, setQueueCounter] = useState(1);
+  const [queueName, setQueueName] = useState("");
+  const [queuePurpose, setQueuePurpose] = useState("");
   const [employee, setEmployee] = useState<{
     employeeId: string;
     name: string;
@@ -135,6 +154,50 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
   // Visitor notification banner
   const [myActiveVisitors, setMyActiveVisitors] = useState<Visitor[]>([]);
 
+  // Feature: Availability Status
+  const [availability, setAvailability] = useState<
+    "available" | "in_meeting" | "out_of_office"
+  >(() => {
+    const emp = JSON.parse(
+      sessionStorage.getItem("safentry_employee") || "null",
+    );
+    if (!emp) return "available";
+    return (
+      (localStorage.getItem(`availability_${emp.employeeId}`) as
+        | "available"
+        | "in_meeting"
+        | "out_of_office") || "available"
+    );
+  });
+  const [companyEmployees, setCompanyEmployees] = useState<
+    Array<{
+      employeeId: string;
+      name: string;
+      surname: string;
+      availability: string;
+    }>
+  >([]);
+
+  // Feature: Working Hours Warning
+  const [outsideWorkingHours, setOutsideWorkingHours] = useState(false);
+
+  // Feature: Post-Visit Feedback
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackVisitorId, setFeedbackVisitorId] = useState("");
+  const [feedbackVisitorName, setFeedbackVisitorName] = useState("");
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackNote, setFeedbackNote] = useState("");
+
+  // Feature: Bulk CSV Upload
+  const [csvUploading, setCsvUploading] = useState(false);
+  const [csvProgress, setCsvProgress] = useState(0);
+  const [csvTotal, setCsvTotal] = useState(0);
+  const [csvResult, setCsvResult] = useState<{
+    success: number;
+    failed: number;
+  } | null>(null);
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
+
   // Polling for new visitor arrival notifications
   const prevVisitorIdsRef = useRef<Set<string> | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -180,6 +243,45 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
 
   // Auto-logout after 30 minutes of inactivity
   useSessionTimeout(logout, !!employee);
+
+  // Load company employees for availability display
+  useEffect(() => {
+    if (!company) return;
+    backend
+      .getCompanyEmployees(company.companyId)
+      .then((emps) => {
+        const list = (
+          emps as {
+            role: string;
+            employee: { employeeId: string; name: string; surname: string };
+          }[]
+        ).map((e) => ({
+          employeeId: e.employee.employeeId,
+          name: e.employee.name,
+          surname: e.employee.surname,
+          availability:
+            localStorage.getItem(`availability_${e.employee.employeeId}`) ||
+            "available",
+        }));
+        setCompanyEmployees(list);
+      })
+      .catch(() => {});
+  }, [company]);
+
+  // Check working hours
+  useEffect(() => {
+    if (!company) return;
+    const wh = localStorage.getItem(`workinghours_${company.companyId}`);
+    if (!wh) return;
+    const { start, end } = JSON.parse(wh) as { start: string; end: string };
+    const now = new Date();
+    const [sh, sm] = start.split(":").map(Number);
+    const [eh, em] = end.split(":").map(Number);
+    const nowMins = now.getHours() * 60 + now.getMinutes();
+    const startMins = sh * 60 + sm;
+    const endMins = eh * 60 + em;
+    setOutsideWorkingHours(nowMins < startMins || nowMins > endMins);
+  }, [company]);
 
   // Load today's visitor count + active visitor notification + all-time my count
   useEffect(() => {
@@ -312,12 +414,30 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
     };
   }, [company, tab, loadActiveVisitors]);
 
+  const handleAvailabilityChange = (
+    status: "available" | "in_meeting" | "out_of_office",
+  ) => {
+    setAvailability(status);
+    if (employee) {
+      localStorage.setItem(`availability_${employee.employeeId}`, status);
+    }
+  };
+
   const handleSecurityCheckout = async (visitorId: string) => {
     if (!company) return;
     setCheckingOutId(visitorId);
     try {
       await backend.checkoutVisitor(visitorId, company.companyId);
       toast.success("Çıkış işlemi tamamlandı");
+      // Find visitor name for feedback modal
+      const visitor = activeVisitors.find((v) => v.visitorId === visitorId);
+      if (visitor) {
+        setFeedbackVisitorId(visitorId);
+        setFeedbackVisitorName(`${visitor.name} ${visitor.surname}`);
+        setFeedbackRating(0);
+        setFeedbackNote("");
+        setShowFeedbackModal(true);
+      }
       await loadActiveVisitors(company.companyId);
     } catch {
       toast.error("Çıkış işlemi başarısız");
@@ -578,6 +698,80 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
 
   if (!employee || !company) return null;
 
+  const handleFeedbackSubmit = () => {
+    if (feedbackRating > 0) {
+      localStorage.setItem(
+        `feedback_${feedbackVisitorId}`,
+        JSON.stringify({
+          rating: feedbackRating,
+          note: feedbackNote,
+          timestamp: Date.now(),
+        }),
+      );
+      toast.success("Değerlendirme kaydedildi");
+    }
+    setShowFeedbackModal(false);
+  };
+
+  const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !company || !employee) return;
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(Boolean);
+    if (lines.length < 2) {
+      toast.error("CSV dosyası boş veya hatalı");
+      return;
+    }
+    const dataLines = lines.slice(1); // skip header
+    setCsvTotal(dataLines.length);
+    setCsvProgress(0);
+    setCsvResult(null);
+    setCsvUploading(true);
+    let successCount = 0;
+    let failedCount = 0;
+    for (let i = 0; i < dataLines.length; i++) {
+      const cols = dataLines[i].split(",").map((c) => c.trim());
+      const [name, surname, tcId, phone, visitingPerson, visitPurpose] = cols;
+      if (!name || !surname || !tcId) {
+        failedCount++;
+        setCsvProgress(i + 1);
+        continue;
+      }
+      try {
+        await backend.registerVisitor(
+          company.companyId,
+          name,
+          surname,
+          tcId,
+          phone || "",
+          visitingPerson || "",
+          visitPurpose || "Toplantı",
+          "bulk-import",
+          null,
+        );
+        successCount++;
+      } catch {
+        failedCount++;
+      }
+      setCsvProgress(i + 1);
+    }
+    setCsvUploading(false);
+    setCsvResult({ success: successCount, failed: failedCount });
+    if (csvFileInputRef.current) csvFileInputRef.current.value = "";
+  };
+
+  const downloadSampleCsv = () => {
+    const csv =
+      "ad,soyad,tcId,telefon,ziyaretEdilen,ziyaretAmaci\nAhmet,Yılmaz,12345678901,05301234567,Mehmet Demir,Toplantı\nAyşe,Kaya,98765432109,05449876543,Ali Veli,Mülakat";
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "ornek_ziyaretci_listesi.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const canManageEmployees = role === "owner";
   const canViewStats = role === "owner" || role === "authorized";
 
@@ -617,6 +811,26 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
     const h = Math.floor(avgMin / 60);
     const m = avgMin % 60;
     return m > 0 ? `${h}s ${m}dk` : `${h} saat`;
+  })();
+
+  // Compute avg satisfaction from feedback
+  const avgSatisfaction = (() => {
+    const visitors = chartVisitors;
+    if (!visitors.length) return null;
+    let total = 0;
+    let count = 0;
+    for (const v of visitors) {
+      const fb = localStorage.getItem(`feedback_${v.visitorId}`);
+      if (fb) {
+        const parsed = JSON.parse(fb) as { rating: number };
+        if (parsed.rating > 0) {
+          total += parsed.rating;
+          count++;
+        }
+      }
+    }
+    if (!count) return null;
+    return (total / count).toFixed(1);
   })();
 
   const inviteLink = (code: string) =>
@@ -730,6 +944,59 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
         )}
       </div>
 
+      {/* Availability Status Card */}
+      <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-border">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+          <SmilePlus className="w-3.5 h-3.5 flex-shrink-0" />
+          <span className="hidden sm:inline">Durumunuz:</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {(["available", "in_meeting", "out_of_office"] as const).map(
+            (status) => {
+              const labels = {
+                available: "Uygun",
+                in_meeting: "Toplantıda",
+                out_of_office: "Dışarıda",
+              };
+              const colors = {
+                available:
+                  availability === status
+                    ? "bg-green-600 text-white border-green-600"
+                    : "text-green-700 border-green-300 hover:bg-green-50",
+                in_meeting:
+                  availability === status
+                    ? "bg-amber-500 text-white border-amber-500"
+                    : "text-amber-700 border-amber-300 hover:bg-amber-50",
+                out_of_office:
+                  availability === status
+                    ? "bg-red-600 text-white border-red-600"
+                    : "text-red-700 border-red-300 hover:bg-red-50",
+              };
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  data-ocid={`availability.${status}.toggle`}
+                  onClick={() => handleAvailabilityChange(status)}
+                  className={`text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors ${colors[status]}`}
+                >
+                  {labels[status]}
+                </button>
+              );
+            },
+          )}
+        </div>
+      </div>
+
+      {/* Working Hours Warning */}
+      {outsideWorkingHours && tab === "register" && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800">
+          <span className="text-xs font-medium">
+            ⚠ Mesai saatleri dışında kayıt yapılıyor
+          </span>
+        </div>
+      )}
+
       <nav className="border-b border-border bg-white">
         <div className="flex px-4 overflow-x-auto">
           <TabBtn
@@ -794,15 +1061,74 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
               label="Kayıtlar"
             />
           )}
+          <TabBtn
+            active={tab === "sira"}
+            onClick={() => setTab("sira")}
+            ocid="employee_dash.sira.tab"
+            icon={<Users className="w-4 h-4" />}
+            label="Sıra"
+          />
         </div>
       </nav>
 
       <main className="flex-1 overflow-auto">
         {tab === "register" && (
-          <VisitorRegisterForm
-            companyId={company.companyId}
-            employeeId={employee.employeeId}
-          />
+          <div>
+            <VisitorRegisterForm
+              companyId={company.companyId}
+              employeeId={employee.employeeId}
+            />
+            {companyEmployees.length > 0 && (
+              <div className="px-4 pb-4 max-w-lg">
+                <div
+                  data-ocid="availability.panel"
+                  className="bg-white border border-border rounded-2xl p-4"
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Personel Durumları
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {companyEmployees.slice(0, 10).map((emp) => {
+                      const statusColors = {
+                        available:
+                          "bg-green-50 text-green-700 border-green-200",
+                        in_meeting:
+                          "bg-amber-50 text-amber-700 border-amber-200",
+                        out_of_office: "bg-red-50 text-red-700 border-red-200",
+                      };
+                      const statusLabels = {
+                        available: "Uygun",
+                        in_meeting: "Toplantıda",
+                        out_of_office: "Dışarıda",
+                      };
+                      const st =
+                        (emp.availability as
+                          | "available"
+                          | "in_meeting"
+                          | "out_of_office") || "available";
+                      return (
+                        <div
+                          key={emp.employeeId}
+                          data-ocid="availability.employee.item"
+                          className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs ${statusColors[st]}`}
+                        >
+                          <span className="font-medium truncate flex-1">
+                            {emp.name} {emp.surname}
+                          </span>
+                          <span className="flex-shrink-0 opacity-75">
+                            {statusLabels[st]}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         )}
         {tab === "list" && (
           <VisitorList companyId={company.companyId} canCheckout={true} />
@@ -1221,6 +1547,79 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                 </div>
               </div>
             )}
+
+            {/* Bulk CSV Upload Section */}
+            <div
+              data-ocid="csv_upload.panel"
+              className="mt-4 bg-white border border-border rounded-2xl p-5"
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <Upload className="w-4 h-4 text-blue-500" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Toplu CSV ile Ön Kayıt
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">
+                CSV formatı:{" "}
+                <span className="font-mono bg-muted px-1 rounded">
+                  ad,soyad,tcId,telefon,ziyaretEdilen,ziyaretAmaci
+                </span>
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <label
+                  htmlFor="csv-file-input"
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl cursor-pointer transition-colors ${csvUploading ? "bg-muted text-muted-foreground" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {csvUploading
+                    ? `${csvProgress}/${csvTotal} işleniyor...`
+                    : "CSV Yükle"}
+                  <input
+                    id="csv-file-input"
+                    ref={csvFileInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    data-ocid="csv_upload.upload_button"
+                    className="hidden"
+                    disabled={csvUploading}
+                    onChange={handleCsvUpload}
+                  />
+                </label>
+                <button
+                  type="button"
+                  data-ocid="csv_upload.download_sample_csv.button"
+                  onClick={downloadSampleCsv}
+                  className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  Örnek CSV İndir
+                </button>
+              </div>
+              {csvUploading && (
+                <div
+                  data-ocid="csv_upload.loading_state"
+                  className="w-full bg-muted rounded-full h-1.5 mb-2"
+                >
+                  <div
+                    className="bg-blue-500 h-1.5 rounded-full transition-all"
+                    style={{
+                      width:
+                        csvTotal > 0
+                          ? `${(csvProgress / csvTotal) * 100}%`
+                          : "0%",
+                    }}
+                  />
+                </div>
+              )}
+              {csvResult && (
+                <div
+                  data-ocid="csv_upload.success_state"
+                  className={`text-xs font-medium px-3 py-2 rounded-xl ${csvResult.failed === 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-800 border border-amber-200"}`}
+                >
+                  ✓ {csvResult.success} başarılı
+                  {csvResult.failed > 0 ? `, ${csvResult.failed} hatalı` : ""}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1380,6 +1779,14 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     icon={<Clock className="w-5 h-5" />}
                     color="blue"
                   />
+                  {avgSatisfaction !== null && (
+                    <StatCard
+                      label="Ort. Memnuniyet"
+                      value={`${avgSatisfaction} ★`}
+                      icon={<Star className="w-5 h-5" />}
+                      color="primary"
+                    />
+                  )}
                 </div>
 
                 <div data-ocid="employee_dash.weekly_chart.section">
@@ -1579,7 +1986,243 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             )}
           </div>
         )}
+
+        {tab === "sira" && (
+          <div className="p-6 max-w-2xl space-y-6">
+            <h2 className="font-display font-semibold text-foreground text-base">
+              Sıra Yönetimi
+            </h2>
+
+            {/* Summary badges */}
+            <div className="flex gap-3">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl">
+                <Users className="w-4 h-4 text-amber-600" />
+                <span className="text-sm font-medium text-amber-800">
+                  Bekleyen: {queue.filter((q) => q.status === "waiting").length}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <Check className="w-4 h-4 text-emerald-600" />
+                <span className="text-sm font-medium text-emerald-800">
+                  Çağrılan: {queue.filter((q) => q.status === "called").length}
+                </span>
+              </div>
+            </div>
+
+            {/* Add to queue form */}
+            <div className="bg-white border border-border rounded-2xl p-4 space-y-3">
+              <div className="flex gap-2 flex-wrap">
+                <input
+                  data-ocid="queue.name_input"
+                  value={queueName}
+                  onChange={(e) => setQueueName(e.target.value)}
+                  placeholder="Ziyaretçi adı (zorunlu)"
+                  className="flex-1 min-w-32 border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white"
+                />
+                <input
+                  data-ocid="queue.purpose_input"
+                  value={queuePurpose}
+                  onChange={(e) => setQueuePurpose(e.target.value)}
+                  placeholder="Ziyaret amacı (isteğe bağlı)"
+                  className="flex-1 min-w-32 border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white"
+                />
+                <button
+                  type="button"
+                  data-ocid="queue.add_button"
+                  disabled={!queueName.trim()}
+                  onClick={() => {
+                    if (!queueName.trim()) return;
+                    setQueue((prev) => [
+                      ...prev,
+                      {
+                        id: `q-${Date.now()}`,
+                        number: queueCounter,
+                        name: queueName.trim(),
+                        purpose: queuePurpose.trim(),
+                        status: "waiting" as const,
+                        addedAt: new Date(),
+                      },
+                    ]);
+                    setQueueCounter((c) => c + 1);
+                    setQueueName("");
+                    setQueuePurpose("");
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  Kuyruğa Ekle
+                </button>
+              </div>
+            </div>
+
+            {/* Queue list */}
+            {queue.length === 0 ? (
+              <div
+                data-ocid="queue.empty_state"
+                className="flex flex-col items-center justify-center py-16 text-center"
+              >
+                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mb-3">
+                  <Users className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">Sıra boş</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {queue.map((entry, i) => (
+                  <div
+                    key={entry.id}
+                    className={`flex items-center gap-3 p-3 border rounded-xl transition-colors ${
+                      entry.status === "called"
+                        ? "bg-emerald-50 border-emerald-200"
+                        : "bg-white border-border"
+                    }`}
+                  >
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                        entry.status === "called"
+                          ? "bg-emerald-500 text-white"
+                          : "bg-primary/10 text-primary"
+                      }`}
+                    >
+                      {entry.number}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">
+                        {entry.name}
+                      </p>
+                      {entry.purpose && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {entry.purpose}
+                        </p>
+                      )}
+                    </div>
+                    <div
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        entry.status === "called"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-amber-100 text-amber-700"
+                      }`}
+                    >
+                      {entry.status === "called" ? "Çağrıldı" : "Bekliyor"}
+                    </div>
+                    {entry.status === "waiting" && (
+                      <button
+                        type="button"
+                        data-ocid={`queue.call_button.${i + 1}`}
+                        onClick={() =>
+                          setQueue((prev) =>
+                            prev.map((q) =>
+                              q.id === entry.id
+                                ? { ...q, status: "called" as const }
+                                : q,
+                            ),
+                          )
+                        }
+                        className="p-1.5 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors"
+                        title="Çağır"
+                      >
+                        <Bell className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      data-ocid={`queue.delete_button.${i + 1}`}
+                      onClick={() =>
+                        setQueue((prev) =>
+                          prev.filter((q) => q.id !== entry.id),
+                        )
+                      }
+                      className="p-1.5 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Kaldır"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
+
+      {/* Post-Visit Feedback Modal */}
+      {showFeedbackModal && (
+        <div
+          data-ocid="feedback.dialog"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        >
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
+                <Star className="w-4 h-4 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="font-display font-semibold text-foreground text-sm">
+                  Ziyaretçi Değerlendirmesi
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {feedbackVisitorName}
+                </p>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-foreground mb-2">
+                Değerlendirme (1-5)
+              </p>
+              <div className="flex items-center gap-1.5">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    data-ocid={`feedback.star.${star}`}
+                    onClick={() => setFeedbackRating(star)}
+                    className={`text-2xl transition-transform hover:scale-110 ${star <= feedbackRating ? "text-amber-400" : "text-gray-200"}`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label
+                htmlFor="feedback-note"
+                className="text-xs font-medium text-foreground block mb-1.5"
+              >
+                Not{" "}
+                <span className="text-muted-foreground">(isteğe bağlı)</span>
+              </label>
+              <textarea
+                id="feedback-note"
+                data-ocid="feedback.textarea"
+                value={feedbackNote}
+                onChange={(e) => setFeedbackNote(e.target.value)}
+                rows={2}
+                placeholder="Kısa bir not..."
+                className="w-full border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 bg-white resize-none"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                data-ocid="feedback.skip_button"
+                onClick={() => setShowFeedbackModal(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
+              >
+                Atla
+              </button>
+              <button
+                type="button"
+                data-ocid="feedback.submit_button"
+                onClick={handleFeedbackSubmit}
+                disabled={feedbackRating === 0}
+                className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50"
+              >
+                Gönder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Invite Modal */}
       {showCreateInvite && (

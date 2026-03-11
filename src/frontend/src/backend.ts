@@ -189,6 +189,7 @@ export enum UserRole {
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     addEmployeeToCompany(companyId: string, employeeId: string, role: EmployeeRole): Promise<void>;
+    addEmployeeToCompanyAsCompany(loginCode: string, employeeId: string, role: EmployeeRole): Promise<void>;
     addVisitorBlacklist(companyId: string, tcId: string, reason: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     cancelInvite(inviteCode: string, companyId: string): Promise<void>;
@@ -202,6 +203,10 @@ export interface backendInterface {
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getCompanyBlacklist(loginCode: string): Promise<Array<BlacklistEntry>>;
+    getCompanyEmployeesAsCompany(loginCode: string): Promise<Array<{
+        role: EmployeeRole;
+        employee: Employee;
+    }>>;
     getCompanyEmployees(companyId: string): Promise<Array<{
         role: EmployeeRole;
         employee: Employee;
@@ -238,11 +243,13 @@ export interface backendInterface {
     registerEmployee(name: string, surname: string): Promise<string>;
     registerVisitor(companyId: string, name: string, surname: string, tcId: string, phone: string, visitingPerson: string, visitPurpose: string, signatureData: string, vehiclePlate: string | null): Promise<string>;
     removeEmployeeFromCompany(companyId: string, targetEmployeeId: string): Promise<void>;
+    removeEmployeeFromCompanyAsCompany(loginCode: string, targetEmployeeId: string): Promise<void>;
     removeVisitorBlacklist(companyId: string, tcId: string): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     setCompanyLogo(loginCode: string, logoData: string): Promise<void>;
     setEmployeePin(employeeId: string, pin: string): Promise<void>;
     setEmployeeRole(companyId: string, targetEmployeeId: string, role: EmployeeRole): Promise<void>;
+    setEmployeeRoleAsCompany(loginCode: string, targetEmployeeId: string, role: EmployeeRole): Promise<void>;
     submitInviteInfo(inviteCode: string, visitorName: string, visitorSurname: string, tcId: string, phone: string): Promise<void>;
     updateCompanyProfile(loginCode: string, name: string, sector: string, address: string, contactPersonName: string): Promise<void>;
     updateVisitorSignature(visitorId: string, companyId: string, signatureData: string): Promise<void>;
@@ -277,6 +284,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.addEmployeeToCompany(arg0, arg1, to_candid_EmployeeRole_n1(this._uploadFile, this._downloadFile, arg2));
+            return result;
+        }
+    }
+    async addEmployeeToCompanyAsCompany(arg0: string, arg1: string, arg2: EmployeeRole): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.addEmployeeToCompanyAsCompany(arg0, arg1, to_candid_EmployeeRole_n1(this._uploadFile, this._downloadFile, arg2));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.addEmployeeToCompanyAsCompany(arg0, arg1, to_candid_EmployeeRole_n1(this._uploadFile, this._downloadFile, arg2));
             return result;
         }
     }
@@ -418,6 +439,23 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getCompanyBlacklist(arg0);
             return result;
+        }
+    }
+    async getCompanyEmployeesAsCompany(arg0: string): Promise<Array<{
+        role: EmployeeRole;
+        employee: Employee;
+    }>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getCompanyEmployeesAsCompany(arg0);
+                return from_candid_vec_n12(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getCompanyEmployeesAsCompany(arg0);
+            return from_candid_vec_n12(this._uploadFile, this._downloadFile, result);
         }
     }
     async getCompanyEmployees(arg0: string): Promise<Array<{
@@ -781,6 +819,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async removeEmployeeFromCompanyAsCompany(arg0: string, arg1: string): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.removeEmployeeFromCompanyAsCompany(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.removeEmployeeFromCompanyAsCompany(arg0, arg1);
+            return result;
+        }
+    }
     async removeVisitorBlacklist(arg0: string, arg1: string): Promise<void> {
         if (this.processError) {
             try {
@@ -848,6 +900,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.setEmployeeRole(arg0, arg1, to_candid_EmployeeRole_n1(this._uploadFile, this._downloadFile, arg2));
+            return result;
+        }
+    }
+    async setEmployeeRoleAsCompany(arg0: string, arg1: string, arg2: EmployeeRole): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setEmployeeRoleAsCompany(arg0, arg1, to_candid_EmployeeRole_n1(this._uploadFile, this._downloadFile, arg2));
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setEmployeeRoleAsCompany(arg0, arg1, to_candid_EmployeeRole_n1(this._uploadFile, this._downloadFile, arg2));
             return result;
         }
     }

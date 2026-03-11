@@ -1,4 +1,14 @@
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Ban,
   BarChart3,
   Building2,
@@ -13,6 +23,7 @@ import {
   Pencil,
   Repeat2,
   TrendingUp,
+  UserCheck,
   Users,
   X,
 } from "lucide-react";
@@ -89,10 +100,19 @@ export default function CompanyDashboard({ onNavigate }: Props) {
   const [blTcId, setBlTcId] = useState("");
   const [blReason, setBlReason] = useState("");
   const [blAdding, setBlAdding] = useState(false);
+  const [confirmBlacklistAddPending, setConfirmBlacklistAddPending] =
+    useState(false);
+  const [confirmBlacklistRemoveId, setConfirmBlacklistRemoveId] = useState<
+    string | null
+  >(null);
 
   // Date range PDF report
   const [reportStart, setReportStart] = useState("");
   const [reportEnd, setReportEnd] = useState("");
+
+  // Working Hours
+  const [workingHoursStart, setWorkingHoursStart] = useState("09:00");
+  const [workingHoursEnd, setWorkingHoursEnd] = useState("18:00");
 
   useEffect(() => {
     const data = sessionStorage.getItem("safentry_company");
@@ -102,6 +122,14 @@ export default function CompanyDashboard({ onNavigate }: Props) {
     }
     const parsed = JSON.parse(data) as Company;
     setCompany(parsed);
+    // Load working hours
+    const wh = localStorage.getItem(`workinghours_${parsed.companyId}`);
+    if (wh) {
+      const { start, end } = JSON.parse(wh) as { start: string; end: string };
+      setWorkingHoursStart(start);
+      setWorkingHoursEnd(end);
+    }
+
     backend
       .getCompanyLogo(parsed.loginCode)
       .then((logo) => {
@@ -246,7 +274,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
     }
   };
 
-  const handleBlacklistAdd = async (e: React.FormEvent) => {
+  const handleBlacklistFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!company) return;
     if (blTcId.length !== 11) {
@@ -257,6 +285,11 @@ export default function CompanyDashboard({ onNavigate }: Props) {
       toast.error("Engelleme sebebi zorunludur");
       return;
     }
+    setConfirmBlacklistAddPending(true);
+  };
+
+  const handleBlacklistAdd = async () => {
+    if (!company) return;
     setBlAdding(true);
     try {
       await backend.addVisitorBlacklist(
@@ -307,6 +340,27 @@ export default function CompanyDashboard({ onNavigate }: Props) {
       .filter((item) => item.count > 1)
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
+  })();
+
+  // Compute avg satisfaction from visitor feedback
+  const companyAvgSatisfaction = (() => {
+    if (!chartVisitors.length) return null;
+    let total = 0;
+    let count = 0;
+    for (const v of chartVisitors) {
+      const visitorId = (v as { visitorId?: string }).visitorId;
+      if (!visitorId) continue;
+      const fb = localStorage.getItem(`feedback_${visitorId}`);
+      if (fb) {
+        const parsed = JSON.parse(fb) as { rating: number };
+        if (parsed.rating > 0) {
+          total += parsed.rating;
+          count++;
+        }
+      }
+    }
+    if (!count) return null;
+    return (total / count).toFixed(1);
   })();
 
   // Compute average visit duration
@@ -403,7 +457,10 @@ export default function CompanyDashboard({ onNavigate }: Props) {
           />
         )}
         {tab === "employees" && (
-          <EmployeeManager companyId={company.companyId} />
+          <EmployeeManager
+            companyId={company.companyId}
+            loginCode={company.loginCode}
+          />
         )}
         {tab === "stats" && (
           <div className="p-6 max-w-2xl space-y-6">
@@ -418,6 +475,44 @@ export default function CompanyDashboard({ onNavigate }: Props) {
               </div>
             ) : (
               <div data-ocid="company_dash.stats.section" className="space-y-6">
+                {/* Enhanced Dashboard Metric Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <StatCard
+                    data-ocid="company_dash.today_visitors.card"
+                    label="Bugün Ziyaretçi"
+                    value={String(Number(stats.totalVisitorsToday))}
+                    icon={<Users className="w-5 h-5" />}
+                    color="blue"
+                  />
+                  <StatCard
+                    data-ocid="company_dash.active_visitors.card"
+                    label="Şu An Binada"
+                    value={String(Number(stats.activeVisitorsToday))}
+                    icon={<UserCheck className="w-5 h-5" />}
+                    color="emerald"
+                  />
+                  <StatCard
+                    data-ocid="company_dash.total_personnel.card"
+                    label="Toplam Personel"
+                    value={String(topPersons.length || 0)}
+                    icon={<Users className="w-5 h-5" />}
+                    color="primary"
+                  />
+                  <StatCard
+                    data-ocid="company_dash.weekly_visitors.card"
+                    label="Son 7 Gün"
+                    value={String(
+                      chartVisitors.filter((v) => {
+                        const d = new Date(Number(v.entryTime / 1_000_000n));
+                        const now = new Date();
+                        const diff = (now.getTime() - d.getTime()) / 86400000;
+                        return diff <= 7;
+                      }).length,
+                    )}
+                    icon={<BarChart3 className="w-5 h-5" />}
+                    color="amber"
+                  />
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <StatCard
                     label="Toplam Ziyaretçi"
@@ -444,6 +539,22 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                     icon={<Clock className="w-5 h-5" />}
                     color="amber"
                   />
+                  {companyAvgSatisfaction !== null && (
+                    <div
+                      data-ocid="company_dash.avg_satisfaction.card"
+                      className="rounded-2xl border p-5 bg-amber-50 border-amber-200"
+                    >
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3 bg-amber-100 text-amber-700">
+                        <TrendingUp className="w-5 h-5" />
+                      </div>
+                      <div className="text-3xl font-display font-bold text-amber-800">
+                        {companyAvgSatisfaction} ★
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">
+                        Ort. Memnuniyet
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div data-ocid="company_dash.weekly_chart.section">
@@ -772,6 +883,75 @@ export default function CompanyDashboard({ onNavigate }: Props) {
               </div>
             </div>
 
+            {/* Working Hours Section */}
+            <div
+              data-ocid="company_dash.working_hours.panel"
+              className="bg-white border border-border rounded-2xl p-5"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Clock className="w-4 h-4 text-blue-500" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Çalışma Saatleri
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Mesai saatlerini tanımlayın. Bu saatler dışında kayıt yapılırken
+                personele uyarı gösterilir.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 mb-3">
+                <div className="flex-1 space-y-1">
+                  <label
+                    htmlFor="wh-start"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    Mesai Başlangıcı
+                  </label>
+                  <input
+                    id="wh-start"
+                    type="time"
+                    data-ocid="company_dash.working_hours.start.input"
+                    value={workingHoursStart}
+                    onChange={(e) => setWorkingHoursStart(e.target.value)}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <label
+                    htmlFor="wh-end"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    Mesai Bitişi
+                  </label>
+                  <input
+                    id="wh-end"
+                    type="time"
+                    data-ocid="company_dash.working_hours.end.input"
+                    value={workingHoursEnd}
+                    onChange={(e) => setWorkingHoursEnd(e.target.value)}
+                    className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                data-ocid="company_dash.working_hours.save_button"
+                onClick={() => {
+                  if (!company) return;
+                  localStorage.setItem(
+                    `workinghours_${company.companyId}`,
+                    JSON.stringify({
+                      start: workingHoursStart,
+                      end: workingHoursEnd,
+                    }),
+                  );
+                  toast.success("Çalışma saatleri kaydedildi");
+                }}
+                className="flex items-center gap-2 text-xs font-semibold px-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Kaydet
+              </button>
+            </div>
+
             {/* Blacklist Section */}
             <div
               data-ocid="company_dash.blacklist.section"
@@ -789,7 +969,10 @@ export default function CompanyDashboard({ onNavigate }: Props) {
               </p>
 
               {/* Add form */}
-              <form onSubmit={handleBlacklistAdd} className="space-y-2 mb-4">
+              <form
+                onSubmit={handleBlacklistFormSubmit}
+                className="space-y-2 mb-4"
+              >
                 <div className="flex gap-2">
                   <input
                     data-ocid="company_dash.blacklist.tc.input"
@@ -863,7 +1046,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                       <button
                         type="button"
                         data-ocid={`company_dash.blacklist.remove.button.${i + 1}`}
-                        onClick={() => handleBlacklistRemove(entry.tcId)}
+                        onClick={() => setConfirmBlacklistRemoveId(entry.tcId)}
                         className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
                         title="Listeden çıkar"
                       >
@@ -877,6 +1060,68 @@ export default function CompanyDashboard({ onNavigate }: Props) {
           </div>
         )}
       </main>
+
+      {/* Blacklist Add Confirmation Dialog */}
+      <AlertDialog
+        open={confirmBlacklistAddPending}
+        onOpenChange={setConfirmBlacklistAddPending}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Kara Listeye Ekle</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bu TC kimlik numarasını kara listeye eklemek istediğinizden emin
+              misiniz?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-ocid="company_dash.blacklist_add.cancel_button">
+              İptal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-ocid="company_dash.blacklist_add.confirm_button"
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                setConfirmBlacklistAddPending(false);
+                handleBlacklistAdd();
+              }}
+            >
+              Ekle
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Blacklist Remove Confirmation Dialog */}
+      <AlertDialog
+        open={!!confirmBlacklistRemoveId}
+        onOpenChange={(open) => !open && setConfirmBlacklistRemoveId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Kara Listeden Çıkar</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bu kişiyi kara listeden çıkarmak istediğinizden emin misiniz?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-ocid="company_dash.blacklist_remove.cancel_button">
+              İptal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-ocid="company_dash.blacklist_remove.confirm_button"
+              onClick={() => {
+                if (confirmBlacklistRemoveId) {
+                  handleBlacklistRemove(confirmBlacklistRemoveId);
+                }
+                setConfirmBlacklistRemoveId(null);
+              }}
+            >
+              Çıkar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Profile Edit Modal */}
       {showProfileModal && (

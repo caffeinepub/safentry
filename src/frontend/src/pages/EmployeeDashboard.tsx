@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Bell,
+  BookOpen,
   Calendar,
   CheckCircle2,
   Clock,
@@ -24,6 +25,7 @@ import { toast } from "sonner";
 import type { Screen } from "../App";
 import EmployeeManager from "../components/EmployeeManager";
 import HourlyDensityChart from "../components/HourlyDensityChart";
+import KioskMode from "../components/KioskMode";
 import PurposeDistributionChart from "../components/PurposeDistributionChart";
 import VisitorList from "../components/VisitorList";
 import VisitorRegisterForm from "../components/VisitorRegisterForm";
@@ -41,7 +43,8 @@ type Tab =
   | "security"
   | "employees"
   | "stats"
-  | "davetler";
+  | "davetler"
+  | "kayitlar";
 
 interface Visitor {
   entryTime: bigint;
@@ -112,8 +115,18 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
   const [checkingOutId, setCheckingOutId] = useState<string | null>(null);
   const securityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Evacuation modal
+  const [showEvacuation, setShowEvacuation] = useState(false);
+
+  // Date range PDF report
+  const [reportStart, setReportStart] = useState("");
+  const [reportEnd, setReportEnd] = useState("");
+
   // PIN change modal
   const [showPinModal, setShowPinModal] = useState(false);
+  const [kioskMode, setKioskMode] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
   const [newPin, setNewPin] = useState("");
   const [newPinConfirm, setNewPinConfirm] = useState("");
   const [pinSaving, setPinSaving] = useState(false);
@@ -320,7 +333,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
         .then((s) => setStats(s as typeof stats))
         .catch(() => toast.error("İstatistikler yüklenemedi")),
       backend
-        .getTopVisitedPersons(c.companyId, BigInt(5))
+        .getTopVisitedPersons(c.companyId, BigInt(10))
         .then((r) => setTopPersons(r as [string, bigint][]))
         .catch(() => {}),
       backend
@@ -373,6 +386,19 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
   }, []);
 
   useEffect(() => {
+    if (company && tab === "kayitlar") {
+      setAuditLoading(true);
+      backend
+        .getAuditLogs(company.companyId)
+        .then((logs) => {
+          const sorted = [...logs].sort((a, b) =>
+            Number(b.timestamp - a.timestamp),
+          );
+          setAuditLogs(sorted);
+        })
+        .catch(() => setAuditLogs([]))
+        .finally(() => setAuditLoading(false));
+    }
     if (company && tab === "davetler") {
       loadInvites(company.companyId);
     }
@@ -618,6 +644,16 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            data-ocid="kiosk.open_modal_button"
+            onClick={() => setKioskMode(true)}
+            className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors border border-emerald-200"
+            title="Kiosk Modu"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Kiosk</span>
+          </button>
+          <button
+            type="button"
             data-ocid="employee_dash.change_pin.button"
             onClick={() => setShowPinModal(true)}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-lg transition-colors"
@@ -749,6 +785,15 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
               label="Personel"
             />
           )}
+          {role === "owner" && (
+            <TabBtn
+              active={tab === "kayitlar"}
+              onClick={() => setTab("kayitlar")}
+              ocid="audit.tab"
+              icon={<BookOpen className="w-4 h-4" />}
+              label="Kayıtlar"
+            />
+          )}
         </div>
       </nav>
 
@@ -764,6 +809,126 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
         )}
         {tab === "security" && (
           <div className="p-4">
+            {/* Evacuation Modal */}
+            {showEvacuation && (
+              <dialog
+                data-ocid="evacuation.modal"
+                open
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-0 m-0 max-w-none w-full h-full border-0 print:bg-transparent print:static print:block"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setShowEvacuation(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setShowEvacuation(false);
+                }}
+              >
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden print:shadow-none print:rounded-none print:max-w-full print:mx-0">
+                  <div className="flex items-center justify-between p-5 border-b border-border print:hidden">
+                    <div>
+                      <h2 className="font-semibold text-foreground">
+                        Tahliye Listesi
+                      </h2>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {activeVisitors.length} aktif ziyaretçi
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        data-ocid="evacuation.print_button"
+                        onClick={() => window.print()}
+                        className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+                      >
+                        🖨 Yazdır
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowEvacuation(false)}
+                        className="text-xs px-3 py-2 rounded-xl border border-border hover:bg-muted transition-colors"
+                      >
+                        Kapat
+                      </button>
+                    </div>
+                  </div>
+                  {/* Printable area */}
+                  <div className="p-5 overflow-y-auto max-h-[70vh] print:max-h-none print:overflow-visible">
+                    <div className="print-only hidden print:block mb-4">
+                      <h1 className="text-lg font-bold">
+                        {company?.companyName} — ACİL TAHLİYE LİSTESİ
+                      </h1>
+                      <p className="text-sm text-gray-500">
+                        {new Date().toLocaleString("tr-TR")}
+                      </p>
+                    </div>
+                    {activeVisitors.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-8">
+                        Binada aktif ziyaretçi yok
+                      </p>
+                    ) : (
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b-2 border-border">
+                            <th className="text-left py-2 pr-3 text-xs font-semibold text-muted-foreground">
+                              Sıra
+                            </th>
+                            <th className="text-left py-2 pr-3 text-xs font-semibold text-muted-foreground">
+                              Ad Soyad
+                            </th>
+                            <th className="text-left py-2 pr-3 text-xs font-semibold text-muted-foreground hidden sm:table-cell">
+                              TC Kimlik No
+                            </th>
+                            <th className="text-left py-2 pr-3 text-xs font-semibold text-muted-foreground">
+                              Giriş Saati
+                            </th>
+                            <th className="text-left py-2 pr-3 text-xs font-semibold text-muted-foreground hidden md:table-cell">
+                              Ziyaret Edilen
+                            </th>
+                            <th className="text-left py-2 text-xs font-semibold text-muted-foreground hidden md:table-cell">
+                              Telefon
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeVisitors.map((v, i) => (
+                            <tr
+                              key={v.visitorId}
+                              className="border-b border-border/50 last:border-0"
+                            >
+                              <td className="py-2 pr-3 text-muted-foreground font-medium">
+                                {i + 1}
+                              </td>
+                              <td className="py-2 pr-3 font-medium">
+                                {v.name} {v.surname}
+                              </td>
+                              <td className="py-2 pr-3 text-muted-foreground hidden sm:table-cell">
+                                {v.tcId}
+                              </td>
+                              <td className="py-2 pr-3 text-muted-foreground">
+                                {new Date(
+                                  Number(v.entryTime / BigInt(1_000_000)),
+                                ).toLocaleTimeString("tr-TR", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </td>
+                              <td className="py-2 pr-3 text-muted-foreground hidden md:table-cell">
+                                {typeof v.visitingPerson === "string"
+                                  ? v.visitingPerson
+                                  : ""}
+                              </td>
+                              <td className="py-2 text-muted-foreground hidden md:table-cell">
+                                {typeof v.phone === "string" ? v.phone : ""}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </dialog>
+            )}
+
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="font-display font-semibold text-foreground text-sm">
@@ -773,13 +938,24 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                   Binada aktif olan ziyaretçiler · Her 30 saniyede güncellenir
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => loadActiveVisitors(company.companyId)}
-                className="text-xs text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-lg transition-colors"
-              >
-                Yenile
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  data-ocid="evacuation.open_modal_button"
+                  onClick={() => setShowEvacuation(true)}
+                  disabled={activeVisitors.length === 0}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-50"
+                >
+                  🚨 Tahliye Listesi
+                </button>
+                <button
+                  type="button"
+                  onClick={() => loadActiveVisitors(company.companyId)}
+                  className="text-xs text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  Yenile
+                </button>
+              </div>
             </div>
 
             {securityLoading && (
@@ -1054,6 +1230,115 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             currentEmployeeId={employee.employeeId}
           />
         )}
+        {tab === "kayitlar" && role === "owner" && (
+          <div className="p-4 max-w-4xl">
+            <h2 className="font-display font-semibold text-foreground text-base mb-4">
+              Denetim Kaydı
+            </h2>
+            {auditLoading ? (
+              <div data-ocid="audit.loading_state" className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="h-12 bg-muted rounded-xl animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : auditLogs.length === 0 ? (
+              <div
+                data-ocid="audit.empty_state"
+                className="flex flex-col items-center justify-center py-16 text-center"
+              >
+                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mb-3">
+                  <BookOpen className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">Henüz kayıt yok</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-border">
+                <table data-ocid="audit.table" className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">
+                        Tarih / Saat
+                      </th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">
+                        İşlem
+                      </th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">
+                        Yapan
+                      </th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">
+                        Detay
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {auditLogs.map((log, i) => {
+                      const actionMap: Record<
+                        string,
+                        { label: string; cls: string }
+                      > = {
+                        BLACKLIST_ADD: {
+                          label: "Kara Liste Eklendi",
+                          cls: "bg-red-50 text-red-700 border border-red-200",
+                        },
+                        BLACKLIST_REMOVE: {
+                          label: "Kara Listeden Çıkarıldı",
+                          cls: "bg-orange-50 text-orange-700 border border-orange-200",
+                        },
+                        EMPLOYEE_REMOVED: {
+                          label: "Personel Çıkarıldı",
+                          cls: "bg-red-50 text-red-700 border border-red-200",
+                        },
+                        VISITOR_CHECKOUT: {
+                          label: "Çıkış Yapıldı",
+                          cls: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+                        },
+                      };
+                      const action = actionMap[log.action] || {
+                        label: log.action,
+                        cls: "bg-muted text-muted-foreground border border-border",
+                      };
+                      const ts = new Date(
+                        Number(log.timestamp / 1_000_000n),
+                      ).toLocaleString("tr-TR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
+                      return (
+                        <tr
+                          key={log.logId || i}
+                          className="bg-white hover:bg-muted/30 transition-colors"
+                        >
+                          <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">
+                            {ts}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex text-xs font-medium px-2 py-0.5 rounded-full ${action.cls}`}
+                            >
+                              {action.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-foreground font-mono">
+                            {log.performedBy}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs truncate">
+                            {log.details}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
         {tab === "stats" && canViewStats && (
           <div className="p-6 max-w-2xl space-y-6">
             {!stats ? (
@@ -1112,31 +1397,46 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                 )}
 
                 {topPersons.length > 0 && (
-                  <div className="bg-white border border-border rounded-2xl p-5">
+                  <div
+                    data-ocid="top_visited.panel"
+                    className="bg-white border border-border rounded-2xl p-5"
+                  >
                     <div className="flex items-center gap-2 mb-4">
                       <Medal className="w-4 h-4 text-amber-500" />
                       <h3 className="text-sm font-semibold text-foreground">
-                        En Çok Ziyaret Edilen Kişiler
+                        En Çok Ziyaret Edilen Personel
                       </h3>
                     </div>
                     <div className="space-y-2.5">
-                      {topPersons.map(([name, count], i) => (
-                        <div
-                          key={name}
-                          data-ocid={`employee_dash.top_person.item.${i + 1}`}
-                          className="flex items-center gap-3"
-                        >
-                          <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                            {i + 1}
-                          </span>
-                          <span className="flex-1 text-sm text-foreground truncate">
-                            {name}
-                          </span>
-                          <span className="text-sm font-semibold text-primary">
-                            {String(count)} ziyaret
-                          </span>
-                        </div>
-                      ))}
+                      {topPersons.map(([name, count], i) => {
+                        const medalColor =
+                          i === 0
+                            ? "bg-amber-100 text-amber-700"
+                            : i === 1
+                              ? "bg-slate-100 text-slate-600"
+                              : i === 2
+                                ? "bg-orange-100 text-orange-700"
+                                : "bg-muted text-muted-foreground";
+                        return (
+                          <div
+                            key={name}
+                            data-ocid={`top_visited.item.${i + 1}`}
+                            className="flex items-center gap-3"
+                          >
+                            <span
+                              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${medalColor}`}
+                            >
+                              {i + 1}
+                            </span>
+                            <span className="flex-1 text-sm text-foreground truncate">
+                              {name}
+                            </span>
+                            <span className="text-sm font-semibold text-primary">
+                              {String(count)} ziyaret
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1173,6 +1473,108 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     </div>
                   </div>
                 )}
+                {/* Date Range PDF Report */}
+                <div
+                  data-ocid="date_report.panel"
+                  className="bg-white border border-border rounded-2xl p-5"
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <Calendar className="w-4 h-4 text-blue-500" />
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Tarih Aralığı Raporu
+                    </h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Seçilen tarih aralığındaki ziyaretleri PDF olarak indirin.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                    <div className="flex-1 space-y-1">
+                      <label
+                        htmlFor="erpt_start"
+                        className="text-xs font-medium text-muted-foreground"
+                      >
+                        Başlangıç Tarihi
+                      </label>
+                      <input
+                        id="erpt_start"
+                        type="date"
+                        data-ocid="date_report.start_input"
+                        value={reportStart}
+                        onChange={(e) => setReportStart(e.target.value)}
+                        className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <label
+                        htmlFor="erpt_end"
+                        className="text-xs font-medium text-muted-foreground"
+                      >
+                        Bitiş Tarihi
+                      </label>
+                      <input
+                        id="erpt_end"
+                        type="date"
+                        data-ocid="date_report.end_input"
+                        value={reportEnd}
+                        onChange={(e) => setReportEnd(e.target.value)}
+                        className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    data-ocid="date_report.submit_button"
+                    disabled={!reportStart || !reportEnd}
+                    onClick={() => {
+                      if (!company || !reportStart || !reportEnd) return;
+                      const start = new Date(reportStart);
+                      const end = new Date(reportEnd);
+                      end.setHours(23, 59, 59, 999);
+                      const filtered = chartVisitors.filter((v) => {
+                        const d = new Date(
+                          Number(v.entryTime / BigInt(1_000_000)),
+                        );
+                        return d >= start && d <= end;
+                      });
+                      const rows = filtered
+                        .map((v, idx) => {
+                          const entry = new Date(
+                            Number(v.entryTime / BigInt(1_000_000)),
+                          ).toLocaleString("tr-TR");
+                          const exit = v.exitTime
+                            ? new Date(
+                                Number(v.exitTime / BigInt(1_000_000)),
+                              ).toLocaleString("tr-TR")
+                            : "—";
+                          const purpose =
+                            typeof v.visitPurpose === "string"
+                              ? v.visitPurpose.replace(/\[.*?\]\s*/, "")
+                              : "";
+                          const visiting =
+                            typeof v.visitingPerson === "string"
+                              ? v.visitingPerson
+                              : "";
+                          return `<tr><td>${idx + 1}</td><td>${v.name} ${v.surname}</td><td>${v.tcId}</td><td>${entry}</td><td>${exit}</td><td>${purpose}</td><td>${visiting}</td></tr>`;
+                        })
+                        .join("");
+                      const printWin = window.open(
+                        "",
+                        "_blank",
+                        "width=900,height=700",
+                      );
+                      if (!printWin) return;
+                      printWin.document.write(
+                        `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>Ziyaret Raporu</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#111}h1{font-size:18px;margin:0}h2{font-size:13px;font-weight:normal;color:#555;margin:4px 0 16px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}th{background:#f5f5f5;font-weight:600}tr:nth-child(even){background:#fafafa}@media print{button{display:none}}</style></head><body><h1>${company.companyName} — Ziyaret Raporu</h1><h2>${reportStart} – ${reportEnd} · ${filtered.length} ziyaret</h2><table><thead><tr><th>#</th><th>Ad Soyad</th><th>TC Kimlik No</th><th>Giriş</th><th>Çıkış</th><th>Ziyaret Amacı</th><th>Ziyaret Edilen</th></tr></thead><tbody>${rows}</tbody></table><br/><button onclick="window.print()">Yazdır / PDF Kaydet</button></body></html>`,
+                      );
+                      printWin.document.close();
+                      printWin.focus();
+                    }}
+                    className="flex items-center gap-2 text-xs font-semibold px-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    PDF İndir
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1409,6 +1811,21 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
       )}
 
       {/* PIN Change Modal */}
+      {kioskMode && employee && company && (
+        <KioskMode
+          company={{
+            companyId: company.companyId,
+            companyName: company.companyName,
+          }}
+          employee={{
+            employeeId: employee.employeeId,
+            name: employee.name,
+            surname: employee.surname,
+          }}
+          onExit={() => setKioskMode(false)}
+        />
+      )}
+
       {showPinModal && (
         <div
           data-ocid="employee_dash.pin_modal.dialog"

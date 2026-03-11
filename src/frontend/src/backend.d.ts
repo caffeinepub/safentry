@@ -16,6 +16,15 @@ export interface Company {
     contactPersonName: string;
     companyId: string;
 }
+export interface AuditLog {
+    action: string;
+    logId: string;
+    performedBy: string;
+    timestamp: Time;
+    details: string;
+    targetId: string;
+    companyId: string;
+}
 export type Time = bigint;
 export interface VerifyDocumentResult {
     exitTime?: Time;
@@ -106,6 +115,7 @@ export interface backendInterface {
      */
     createInvite(companyId: string, visitingPerson: string, visitPurpose: string): Promise<string>;
     finalizeInvite(inviteCode: string, companyId: string, signatureData: string, vehiclePlate: string | null, _visitorType: string | null, _ndaAccepted: boolean): Promise<string>;
+    getAuditLogs(companyId: string): Promise<Array<AuditLog>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getCompanyBlacklist(loginCode: string): Promise<Array<BlacklistEntry>>;
@@ -133,6 +143,7 @@ export interface backendInterface {
     getVisitors(companyId: string): Promise<Array<Visitor>>;
     getVisitorsAsCompany(loginCode: string): Promise<Array<Visitor>>;
     getVisitorsByPerson(companyId: string, personName: string): Promise<Array<Visitor>>;
+    getVisitorsByTcId(companyId: string, tcId: string): Promise<Array<Visitor>>;
     isCallerAdmin(): Promise<boolean>;
     isVisitorBlacklisted(companyId: string, tcId: string): Promise<boolean>;
     loginCompany(loginCode: string): Promise<Company | null>;

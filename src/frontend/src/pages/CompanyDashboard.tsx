@@ -90,6 +90,10 @@ export default function CompanyDashboard({ onNavigate }: Props) {
   const [blReason, setBlReason] = useState("");
   const [blAdding, setBlAdding] = useState(false);
 
+  // Date range PDF report
+  const [reportStart, setReportStart] = useState("");
+  const [reportEnd, setReportEnd] = useState("");
+
   useEffect(() => {
     const data = sessionStorage.getItem("safentry_company");
     if (!data) {
@@ -133,7 +137,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
         })
         .catch(() => toast.error("İstatistikler yüklenemedi")),
       backend
-        .getTopVisitedPersonsAsCompany(c.loginCode, BigInt(5))
+        .getTopVisitedPersonsAsCompany(c.loginCode, BigInt(10))
         .then((r) => setTopPersons(r as [string, bigint][]))
         .catch(() => {}),
       backend
@@ -455,31 +459,46 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                 )}
 
                 {topPersons.length > 0 && (
-                  <div className="bg-white border border-border rounded-2xl p-5">
+                  <div
+                    data-ocid="top_visited.panel"
+                    className="bg-white border border-border rounded-2xl p-5"
+                  >
                     <div className="flex items-center gap-2 mb-4">
                       <Medal className="w-4 h-4 text-amber-500" />
                       <h3 className="text-sm font-semibold text-foreground">
-                        En Çok Ziyaret Edilen Kişiler
+                        En Çok Ziyaret Edilen Personel
                       </h3>
                     </div>
                     <div className="space-y-2.5">
-                      {topPersons.map(([name, count], i) => (
-                        <div
-                          key={name}
-                          data-ocid={`company_dash.top_person.item.${i + 1}`}
-                          className="flex items-center gap-3"
-                        >
-                          <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground">
-                            {i + 1}
-                          </span>
-                          <span className="flex-1 text-sm text-foreground truncate">
-                            {name}
-                          </span>
-                          <span className="text-sm font-semibold text-primary">
-                            {String(count)} ziyaret
-                          </span>
-                        </div>
-                      ))}
+                      {topPersons.map(([name, count], i) => {
+                        const medalColor =
+                          i === 0
+                            ? "bg-amber-100 text-amber-700"
+                            : i === 1
+                              ? "bg-slate-100 text-slate-600"
+                              : i === 2
+                                ? "bg-orange-100 text-orange-700"
+                                : "bg-muted text-muted-foreground";
+                        return (
+                          <div
+                            key={name}
+                            data-ocid={`top_visited.item.${i + 1}`}
+                            className="flex items-center gap-3"
+                          >
+                            <span
+                              className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${medalColor}`}
+                            >
+                              {i + 1}
+                            </span>
+                            <span className="flex-1 text-sm text-foreground truncate">
+                              {name}
+                            </span>
+                            <span className="text-sm font-semibold text-primary">
+                              {String(count)} ziyaret
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -516,6 +535,108 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                     </div>
                   </div>
                 )}
+                {/* Date Range PDF Report */}
+                <div
+                  data-ocid="date_report.panel"
+                  className="bg-white border border-border rounded-2xl p-5"
+                >
+                  <div className="flex items-center gap-2 mb-4">
+                    <Calendar className="w-4 h-4 text-blue-500" />
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Tarih Aralığı Raporu
+                    </h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Seçilen tarih aralığındaki ziyaretleri PDF olarak indirin.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                    <div className="flex-1 space-y-1">
+                      <label
+                        htmlFor="crpt_start"
+                        className="text-xs font-medium text-muted-foreground"
+                      >
+                        Başlangıç Tarihi
+                      </label>
+                      <input
+                        id="crpt_start"
+                        type="date"
+                        data-ocid="date_report.start_input"
+                        value={reportStart}
+                        onChange={(e) => setReportStart(e.target.value)}
+                        className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <label
+                        htmlFor="crpt_end"
+                        className="text-xs font-medium text-muted-foreground"
+                      >
+                        Bitiş Tarihi
+                      </label>
+                      <input
+                        id="crpt_end"
+                        type="date"
+                        data-ocid="date_report.end_input"
+                        value={reportEnd}
+                        onChange={(e) => setReportEnd(e.target.value)}
+                        className="w-full text-sm border border-border rounded-xl px-3 py-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    data-ocid="date_report.submit_button"
+                    disabled={!reportStart || !reportEnd}
+                    onClick={() => {
+                      if (!company || !reportStart || !reportEnd) return;
+                      const start = new Date(reportStart);
+                      const end = new Date(reportEnd);
+                      end.setHours(23, 59, 59, 999);
+                      const filtered = chartVisitors.filter((v) => {
+                        const d = new Date(
+                          Number(v.entryTime / BigInt(1_000_000)),
+                        );
+                        return d >= start && d <= end;
+                      });
+                      const rows = filtered
+                        .map((v, idx) => {
+                          const entry = new Date(
+                            Number(v.entryTime / BigInt(1_000_000)),
+                          ).toLocaleString("tr-TR");
+                          const exit = v.exitTime
+                            ? new Date(
+                                Number(v.exitTime / BigInt(1_000_000)),
+                              ).toLocaleString("tr-TR")
+                            : "—";
+                          const purpose =
+                            typeof v.visitPurpose === "string"
+                              ? v.visitPurpose.replace(/^\[.*?\]\s*/, "")
+                              : "";
+                          const visiting =
+                            typeof v.visitingPerson === "string"
+                              ? v.visitingPerson
+                              : "";
+                          return `<tr><td>${idx + 1}</td><td>${v.name} ${v.surname}</td><td>${v.tcId}</td><td>${entry}</td><td>${exit}</td><td>${purpose}</td><td>${visiting}</td></tr>`;
+                        })
+                        .join("");
+                      const printWin = window.open(
+                        "",
+                        "_blank",
+                        "width=900,height=700",
+                      );
+                      if (!printWin) return;
+                      printWin.document.write(
+                        `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>Ziyaret Raporu</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#111}h1{font-size:18px;margin:0}h2{font-size:13px;font-weight:normal;color:#555;margin:4px 0 16px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}th{background:#f5f5f5;font-weight:600}tr:nth-child(even){background:#fafafa}@media print{button{display:none}}</style></head><body><h1>${company.name} — Ziyaret Raporu</h1><h2>${reportStart} – ${reportEnd} · ${filtered.length} ziyaret</h2><table><thead><tr><th>#</th><th>Ad Soyad</th><th>TC Kimlik No</th><th>Giriş</th><th>Çıkış</th><th>Ziyaret Amacı</th><th>Ziyaret Edilen</th></tr></thead><tbody>${rows}</tbody></table><br/><button onclick="window.print()">Yazdır / PDF Kaydet</button></body></html>`,
+                      );
+                      printWin.document.close();
+                      printWin.focus();
+                    }}
+                    className="flex items-center gap-2 text-xs font-semibold px-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    PDF İndir
+                  </button>
+                </div>
               </div>
             )}
           </div>

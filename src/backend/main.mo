@@ -6,16 +6,18 @@ import Time "mo:core/Time";
 import Order "mo:core/Order";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
-import Char "mo:core/Char";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import Iter "mo:core/Iter";
 import Option "mo:core/Option";
+import Char "mo:core/Char";
 import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
+import Migration "migration";
 
+(with migration = Migration.run)
 actor {
-  // Initialize access control
+  // Access control system
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
@@ -67,8 +69,8 @@ actor {
     exitTime : ?Time.Time;
     signatureData : Text;
     documentCode : Text;
-    createdBy : Text; // employeeId of creator
-    vehiclePlate : ?Text; // The new field
+    createdBy : Text;
+    vehiclePlate : ?Text;
   };
 
   type CompanyStats = {
@@ -123,6 +125,16 @@ actor {
     accessTime : Time.Time;
   };
 
+  type AuditLog = {
+    logId : Text;
+    companyId : Text;
+    action : Text;
+    performedBy : Text;
+    targetId : Text;
+    details : Text;
+    timestamp : Time.Time;
+  };
+
   // Persistent storage
   let companies = Map.empty<Text, Company>();
   let employees = Map.empty<Text, Employee>();
@@ -136,6 +148,7 @@ actor {
   let employeePins = Map.empty<Text, Text>();
   let companyBlacklist = Map.empty<Text, BlacklistEntry>();
   let vehicleAccessRecords = Map.empty<Text, VehicleAccess>();
+  let auditLogs = Map.empty<Text, AuditLog>();
 
   // Helper functions
   func generateRandomText(length : Nat) : Text {
@@ -193,6 +206,21 @@ actor {
     let dayNs : Int = 86_400_000_000_000; // 1 day in nanoseconds
     let startOfToday = now - (now % dayNs);
     ts >= startOfToday and ts < startOfToday + dayNs;
+  };
+
+  // Helper function to add audit entries
+  func addAuditEntry(companyId : Text, action : Text, performedBy : Text, targetId : Text, details : Text) {
+    let logId = generateRandomText(12);
+    let auditLog : AuditLog = {
+      logId;
+      companyId;
+      action;
+      performedBy;
+      targetId;
+      details;
+      timestamp = Time.now();
+    };
+    auditLogs.add(logId, auditLog);
   };
 
   // User Profile Functions
@@ -354,6 +382,13 @@ actor {
       Runtime.trap("Employee not found in company");
     };
     companyEmployees.remove(key);
+    addAuditEntry(
+      companyId,
+      "EMPLOYEE_REMOVED",
+      callerEmployeeId,
+      targetEmployeeId,
+      "Employee removed from company"
+    );
   };
 
   public shared ({ caller }) func registerVisitor(companyId : Text, name : Text, surname : Text, tcId : Text, phone : Text, visitingPerson : Text, visitPurpose : Text, signatureData : Text, vehiclePlate : ?Text) : async Text {
@@ -366,7 +401,6 @@ actor {
       Runtime.trap("Unauthorized: You must be an employee of this company to register visitors");
     };
 
-    // Check if tcId is in blacklist
     switch (companyBlacklist.get(getCombinedKey(companyId, tcId))) {
       case (?_) {
         Runtime.trap("Bu ziyaretçi kara listede");
@@ -418,6 +452,13 @@ actor {
           visitor with exitTime = ?Time.now();
         };
         visitors.add(visitorId, updatedVisitor);
+        addAuditEntry(
+          companyId,
+          "VISITOR_CHECKOUT",
+          callerEmployeeId,
+          visitorId,
+          "Visitor checked out"
+        );
       };
       case (null) {
         Runtime.trap("Visitor not found");
@@ -891,8 +932,14 @@ actor {
       reason;
       addedAt = Time.now();
     };
-
     companyBlacklist.add(getCombinedKey(companyId, tcId), entry);
+    addAuditEntry(
+      companyId,
+      "BLACKLIST_ADD",
+      employeeId,
+      tcId,
+      reason
+    );
   };
 
   public shared ({ caller }) func removeVisitorBlacklist(companyId : Text, tcId : Text) : async () {
@@ -907,6 +954,13 @@ actor {
     };
 
     companyBlacklist.remove(getCombinedKey(companyId, tcId));
+    addAuditEntry(
+      companyId,
+      "BLACKLIST_REMOVE",
+      employeeId,
+      tcId,
+      "Visitor removed from blacklist"
+    );
   };
 
   public query ({ caller }) func getCompanyBlacklist(loginCode : Text) : async [BlacklistEntry] {
@@ -944,6 +998,35 @@ actor {
     };
 
     companyBlacklist.containsKey(getCombinedKey(companyId, tcId));
+  };
+
+  // New Audit Log Functions - FIXED AUTHORIZATION
+
+  public query ({ caller }) func getAuditLogs(companyId : Text) : async [AuditLog] {
+    // Verify the caller is an employee and get their employeeId
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    // Check that the caller is the owner of the company
+    if (not isOwner(companyId, callerEmployeeId)) {
+      Runtime.trap("Unauthorized: Only owner can view audit logs for this company");
+    };
+
+    let companyLogs = auditLogs.toArray().map(
+      func((_, log)) { log }
+    ).filter(
+      func(log) { log.companyId == companyId }
+    );
+
+    companyLogs.sort(
+      func(log1, log2) {
+        if (log1.timestamp > log2.timestamp) { #less } else if (log1.timestamp < log2.timestamp) { #greater } else {
+          #equal;
+        };
+      }
+    );
   };
 
   ///////////////////////
@@ -1057,7 +1140,7 @@ actor {
         };
         let tcId = switch (invite.tcId) {
           case (?t) { t };
-          case (null) { "" }; // If tcId is absent, use empty string
+          case (null) { "" };
         };
         let phone = switch (invite.phone) {
           case (?p) { p };
@@ -1147,5 +1230,24 @@ actor {
       };
       case (null) { Runtime.trap("Invite not found") };
     };
+  };
+
+  // New functionality for visitor lookup by tcId
+  public query ({ caller }) func getVisitorsByTcId(companyId : Text, tcId : Text) : async [Visitor] {
+    // Anyone working in the company can call this
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    if (not hasAnyRole(companyId, callerEmployeeId)) {
+      Runtime.trap("Unauthorized: Must be an employee of company to query");
+    };
+
+    visitors.values().toArray().filter(
+      func(visitor) {
+        visitor.companyId == companyId and visitor.tcId == tcId
+      }
+    );
   };
 };

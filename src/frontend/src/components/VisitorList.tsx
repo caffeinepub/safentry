@@ -5,12 +5,14 @@ import {
   FileText,
   LogOut,
   Search,
+  User,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { backend } from "../lib/backendSingleton";
 import VisitorDetail from "./VisitorDetail";
 import VisitorDocument from "./VisitorDocument";
+import VisitorProfileModal from "./VisitorProfileModal";
 
 interface Visitor {
   visitorId: string;
@@ -66,6 +68,10 @@ export default function VisitorList({
   const [dateTo, setDateTo] = useState("");
   const [showDateFilter, setShowDateFilter] = useState(false);
   const [docVisitorId, setDocVisitorId] = useState<string | null>(null);
+  const [profileModal, setProfileModal] = useState<{
+    tcId: string;
+    name: string;
+  } | null>(null);
   const [detailVisitorId, setDetailVisitorId] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -411,6 +417,21 @@ export default function VisitorList({
                   >
                     <FileText className="w-4 h-4" />
                   </button>
+                  <button
+                    type="button"
+                    data-ocid={`visitor_list.profile.button.${i + 1}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setProfileModal({
+                        tcId: v.tcId,
+                        name: `${v.name} ${v.surname}`,
+                      });
+                    }}
+                    className="p-1.5 text-muted-foreground hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Profil"
+                  >
+                    <User className="w-4 h-4" />
+                  </button>
                   {canCheckout && !v.exitTime && (
                     <button
                       type="button"
@@ -428,6 +449,16 @@ export default function VisitorList({
           );
         })}
       </div>
+
+      {/* Profile modal */}
+      {profileModal && (
+        <VisitorProfileModal
+          tcId={profileModal.tcId}
+          visitorName={profileModal.name}
+          companyId={companyId}
+          onClose={() => setProfileModal(null)}
+        />
+      )}
 
       {/* Detail modal */}
       {detailVisitorId && (

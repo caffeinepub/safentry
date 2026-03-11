@@ -18,12 +18,21 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
+export const Time = IDL.Int;
+export const AuditLog = IDL.Record({
+  'action' : IDL.Text,
+  'logId' : IDL.Text,
+  'performedBy' : IDL.Text,
+  'timestamp' : Time,
+  'details' : IDL.Text,
+  'targetId' : IDL.Text,
+  'companyId' : IDL.Text,
+});
 export const UserProfile = IDL.Record({
   'name' : IDL.Text,
   'surname' : IDL.Text,
   'employeeId' : IDL.Opt(IDL.Text),
 });
-export const Time = IDL.Int;
 export const BlacklistEntry = IDL.Record({
   'tcId' : IDL.Text,
   'addedAt' : Time,
@@ -117,6 +126,7 @@ export const idlService = IDL.Service({
       [IDL.Text],
       [],
     ),
+  'getAuditLogs' : IDL.Func([IDL.Text], [IDL.Vec(AuditLog)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getCompanyBlacklist' : IDL.Func(
@@ -197,6 +207,11 @@ export const idlService = IDL.Service({
       [IDL.Vec(Visitor)],
       ['query'],
     ),
+  'getVisitorsByTcId' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Vec(Visitor)],
+      ['query'],
+    ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'isVisitorBlacklisted' : IDL.Func(
       [IDL.Text, IDL.Text],
@@ -264,12 +279,21 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
+  const Time = IDL.Int;
+  const AuditLog = IDL.Record({
+    'action' : IDL.Text,
+    'logId' : IDL.Text,
+    'performedBy' : IDL.Text,
+    'timestamp' : Time,
+    'details' : IDL.Text,
+    'targetId' : IDL.Text,
+    'companyId' : IDL.Text,
+  });
   const UserProfile = IDL.Record({
     'name' : IDL.Text,
     'surname' : IDL.Text,
     'employeeId' : IDL.Opt(IDL.Text),
   });
-  const Time = IDL.Int;
   const BlacklistEntry = IDL.Record({
     'tcId' : IDL.Text,
     'addedAt' : Time,
@@ -367,6 +391,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Text],
         [],
       ),
+    'getAuditLogs' : IDL.Func([IDL.Text], [IDL.Vec(AuditLog)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getCompanyBlacklist' : IDL.Func(
@@ -447,6 +472,11 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'getVisitorsByPerson' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Vec(Visitor)],
+        ['query'],
+      ),
+    'getVisitorsByTcId' : IDL.Func(
         [IDL.Text, IDL.Text],
         [IDL.Vec(Visitor)],
         ['query'],

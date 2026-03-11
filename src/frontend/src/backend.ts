@@ -98,6 +98,15 @@ export interface Company {
     contactPersonName: string;
     companyId: string;
 }
+export interface AuditLog {
+    action: string;
+    logId: string;
+    performedBy: string;
+    timestamp: Time;
+    details: string;
+    targetId: string;
+    companyId: string;
+}
 export type Time = bigint;
 export interface VerifyDocumentResult {
     exitTime?: Time;
@@ -189,6 +198,7 @@ export interface backendInterface {
      */
     createInvite(companyId: string, visitingPerson: string, visitPurpose: string): Promise<string>;
     finalizeInvite(inviteCode: string, companyId: string, signatureData: string, vehiclePlate: string | null, _visitorType: string | null, _ndaAccepted: boolean): Promise<string>;
+    getAuditLogs(companyId: string): Promise<Array<AuditLog>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getCompanyBlacklist(loginCode: string): Promise<Array<BlacklistEntry>>;
@@ -216,6 +226,7 @@ export interface backendInterface {
     getVisitors(companyId: string): Promise<Array<Visitor>>;
     getVisitorsAsCompany(loginCode: string): Promise<Array<Visitor>>;
     getVisitorsByPerson(companyId: string, personName: string): Promise<Array<Visitor>>;
+    getVisitorsByTcId(companyId: string, tcId: string): Promise<Array<Visitor>>;
     isCallerAdmin(): Promise<boolean>;
     isVisitorBlacklisted(companyId: string, tcId: string): Promise<boolean>;
     loginCompany(loginCode: string): Promise<Company | null>;
@@ -350,6 +361,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.finalizeInvite(arg0, arg1, arg2, to_candid_opt_n5(this._uploadFile, this._downloadFile, arg3), to_candid_opt_n5(this._uploadFile, this._downloadFile, arg4), arg5);
+            return result;
+        }
+    }
+    async getAuditLogs(arg0: string): Promise<Array<AuditLog>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getAuditLogs(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getAuditLogs(arg0);
             return result;
         }
     }
@@ -624,6 +649,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.getVisitorsByPerson(arg0, arg1);
+            return from_candid_vec_n30(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async getVisitorsByTcId(arg0: string, arg1: string): Promise<Array<Visitor>> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getVisitorsByTcId(arg0, arg1);
+                return from_candid_vec_n30(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getVisitorsByTcId(arg0, arg1);
             return from_candid_vec_n30(this._uploadFile, this._downloadFile, result);
         }
     }

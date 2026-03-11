@@ -47,6 +47,7 @@ export default function VisitorRegisterForm({
   const [savedVisitorId, setSavedVisitorId] = useState<string | null>(null);
   const [recurringCount, setRecurringCount] = useState<number | null>(null);
   const [isBlacklisted, setIsBlacklisted] = useState(false);
+  const [autoFilled, setAutoFilled] = useState(false);
   const recurringTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -77,12 +78,23 @@ export default function VisitorRegisterForm({
 
     recurringTimer.current = setTimeout(async () => {
       try {
-        const [count, blacklisted] = await Promise.all([
+        const [count, blacklisted, prevVisits] = await Promise.all([
           backend.getVisitorCountByTcId(companyId, tcId),
           backend.isVisitorBlacklisted(companyId, tcId),
+          backend.getVisitorsByTcId(companyId, tcId),
         ]);
         setRecurringCount(Number(count));
         setIsBlacklisted(Boolean(blacklisted));
+        if (prevVisits && prevVisits.length > 0) {
+          const sorted = [...prevVisits].sort((a, b) =>
+            Number(b.entryTime - a.entryTime),
+          );
+          const latest = sorted[0];
+          setName((prev) => prev || latest.name);
+          setSurname((prev) => prev || latest.surname);
+          setPhone((prev) => prev || latest.phone);
+          setAutoFilled(true);
+        }
       } catch {
         setRecurringCount(null);
         setIsBlacklisted(false);
@@ -223,6 +235,7 @@ export default function VisitorRegisterForm({
     setHasSig(false);
     setRecurringCount(null);
     setIsBlacklisted(false);
+    setAutoFilled(false);
     clearSignature();
   };
 
@@ -285,7 +298,7 @@ export default function VisitorRegisterForm({
           </label>
           <input
             id="vf-tc"
-            data-ocid="visitor_form.tc.input"
+            data-ocid="visitor_form.tcid_input"
             value={tcId}
             onChange={(e) => setTcId(e.target.value)}
             placeholder="TC Kimlik No"
@@ -305,6 +318,26 @@ export default function VisitorRegisterForm({
               <p className="text-xs text-red-800 leading-relaxed font-medium">
                 Bu ziyaretçi kara listede kayıtlıdır. Kayıt yapılamaz.
               </p>
+            </div>
+          )}
+          {autoFilled && (
+            <div
+              data-ocid="visitor_form.repeat_visitor_banner"
+              className="mt-1.5 flex items-center justify-between gap-2 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-amber-600 text-xs">⚡</span>
+                <p className="text-xs text-amber-800 font-medium">
+                  Tekrarlayan ziyaretçi — bilgiler otomatik dolduruldu
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAutoFilled(false)}
+                className="text-amber-500 hover:text-amber-700 text-xs ml-2 flex-shrink-0"
+              >
+                ✕
+              </button>
             </div>
           )}
           {!isBlacklisted && recurringCount !== null && recurringCount > 0 && (

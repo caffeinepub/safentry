@@ -1,29 +1,29 @@
 # Safentry
 
 ## Current State
-Safentry is a multi-tenant visitor tracking app. Sürüm 10A implemented: active visitor security screen (güvenlik tab), visitor type dropdown, NDA checkbox. Visitor invite links, badge printout, and personnel summary panel are planned for this release.
+Safentry v11A is fully operational with: multi-tenant company management, personnel roles, visitor registration with signature/NDA/visitor-type, exit tracking, QR document verification, blacklist, notifications, statistics (hourly, purpose distribution, top persons), pre-registration/invite links, badge printout, personnel summary, emergency evacuation list, date-range PDF report, and top-visited-person ranking.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Ziyaretçi Davet Linki**: Employee creates an invite with visiting person + purpose. System generates a unique invite code. Employee copies the link (e.g. `?invite=CODE`). Visitor opens link, fills in name/surname/TC/phone. Employee sees pending pre-registrations in a new "Davetler" tab. On arrival, employee finalizes (converts to full visitor record) by capturing signature.
-- **Rozet Baskı Çıktısı**: In visitor list/detail, a print badge button generates a print-friendly badge: visitor name, company name, visit purpose, visiting person, entry time, document code as text. Uses `window.print()` with print CSS.
-- **Personel Özet Paneli**: In EmployeeDashboard, a summary card showing: today's visitors registered by this employee, active (not checked out) visitors registered by this employee, this employee's total all-time visitors.
-- Backend: `PreRegistration` type, `createInvite`, `getInvitePublic`, `submitInviteInfo`, `finalizeInvite`, `getCompanyInvites`, `cancelInvite` functions.
-- New frontend page: `InviteForm.tsx` — public page for visitor to fill their data.
+- **Audit Log**: Track critical actions (blacklist add/remove, employee removal, visitor checkout) per company. Owner-only tab in employee dashboard.
+- **Visitor Profile Page**: Modal showing all past visits for a specific visitor (by TC ID), accessible from the visitor list.
+- **Quick Registration for Repeat Visitors**: During visitor registration, when TC ID is entered, auto-fill name/surname/phone from previous visit. Show repeat-visitor banner.
+- **Self-Service Kiosk Mode**: Fullscreen visitor self-registration mode launched from employee dashboard. Visitor fills in their own info + signature. After submit, resets for next visitor.
 
 ### Modify
-- `App.tsx`: Add `inviteForm` screen.
-- `EmployeeDashboard.tsx`: Add Davetler tab, personel özet kartı.
-- `VisitorList.tsx` or `CompanyDashboard.tsx`: Add badge print button.
-- Backend `main.mo`: Add PreRegistration storage and functions.
+- Backend: Add `AuditLog` type, `auditLogs` storage, `getAuditLogs` query. Add audit calls in `addVisitorBlacklist`, `removeVisitorBlacklist`, `removeEmployeeFromCompany`, `checkoutVisitor`.
+- Backend: Add `getVisitorsByTcId` query for visitor profile.
+- `EmployeeDashboard`: Add "Kayıtlar" tab (owner only) for audit log. Add kiosk mode launch button. Add visitor profile modal.
+- `VisitorRegisterForm`: Add TC ID auto-fill logic for repeat visitors.
 
 ### Remove
 - Nothing removed.
 
 ## Implementation Plan
-1. Update `main.mo` with PreRegistration type and invite functions.
-2. Create `InviteForm.tsx` for visitor self-registration.
-3. Update `EmployeeDashboard.tsx` with Davetler tab and summary card.
-4. Add badge print utility in `VisitorList.tsx`.
-5. Update `App.tsx` to route invite screen.
+1. Update `main.mo`: AuditLog type + storage + getAuditLogs + getVisitorsByTcId + audit calls in mutations.
+2. Regenerate frontend bindings via generate_motoko_code.
+3. Frontend: Add KioskMode component (fullscreen self-registration).
+4. Frontend: Add VisitorProfileModal component (all visits by TC ID).
+5. Frontend: Update VisitorRegisterForm for repeat-visitor quick fill.
+6. Frontend: Update EmployeeDashboard with audit log tab, kiosk button, visitor profile access.

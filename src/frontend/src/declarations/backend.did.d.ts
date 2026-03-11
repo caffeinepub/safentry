@@ -10,6 +10,15 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface AuditLog {
+  'action' : string,
+  'logId' : string,
+  'performedBy' : string,
+  'timestamp' : Time,
+  'details' : string,
+  'targetId' : string,
+  'companyId' : string,
+}
 export interface BlacklistEntry {
   'tcId' : string,
   'addedAt' : Time,
@@ -110,6 +119,7 @@ export interface _SERVICE {
     [string, string, string, [] | [string], [] | [string], boolean],
     string
   >,
+  'getAuditLogs' : ActorMethod<[string], Array<AuditLog>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getCompanyBlacklist' : ActorMethod<[string], Array<BlacklistEntry>>,
@@ -151,6 +161,7 @@ export interface _SERVICE {
   'getVisitors' : ActorMethod<[string], Array<Visitor>>,
   'getVisitorsAsCompany' : ActorMethod<[string], Array<Visitor>>,
   'getVisitorsByPerson' : ActorMethod<[string, string], Array<Visitor>>,
+  'getVisitorsByTcId' : ActorMethod<[string, string], Array<Visitor>>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'isVisitorBlacklisted' : ActorMethod<[string, string], boolean>,
   'loginCompany' : ActorMethod<[string], [] | [Company]>,

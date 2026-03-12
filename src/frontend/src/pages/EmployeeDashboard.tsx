@@ -984,10 +984,10 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             data-ocid="employee_dash.join_company.button"
             onClick={() => setShowJoinModal(true)}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-lg transition-colors"
-            title="Davet Koduyla u015eirkete Katu0131l"
+            title="Davet Koduyla Şirkete Katıl"
           >
             <Key className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Katu0131l</span>
+            <span className="hidden sm:inline">Katıl</span>
           </button>
           <button
             type="button"
@@ -3145,7 +3145,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
           <div className="glass-panel rounded-2xl shadow-elevated p-6 max-w-sm w-full mx-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-foreground">
-                Davet Koduyla u015eirkete Katu0131l
+                Davet Koduyla Şirkete Katıl
               </h3>
               <button
                 type="button"
@@ -3157,8 +3157,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
               </button>
             </div>
             <p className="text-xs text-muted-foreground">
-              u015eirketinizden aldu0131u011fu0131nu0131z 10 karakterlik davet
-              kodunu girin.
+              Şirketinizden aldığınız davet kodunu girin.
             </p>
             <form onSubmit={handleJoinWithInviteCode} className="space-y-3">
               <input
@@ -3177,7 +3176,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                   onClick={() => setShowJoinModal(false)}
                   className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-border hover:bg-muted transition-colors"
                 >
-                  u0130ptal
+                  İptal
                 </button>
                 <button
                   type="submit"
@@ -3185,7 +3184,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                   disabled={joining}
                   className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
-                  {joining ? "Katu0131lu0131yor..." : "Katu0131l"}
+                  {joining ? "Katılıyor..." : "Katıl"}
                 </button>
               </div>
             </form>

@@ -53,6 +53,23 @@ function getLockMessage(lockedUntil: number): string | null {
   return `Hesabınız ${mins} dakika boyunca kilitlendi. Lütfen ${mins} dakika sonra tekrar deneyin.`;
 }
 
+const BG = "oklch(0.13 0.035 262)";
+const CARD_BG = "oklch(0.19 0.042 258)";
+const CARD_BORDER = "oklch(0.28 0.048 255)";
+const MUTED_BG = "oklch(0.17 0.03 260)";
+const INPUT_BG = "oklch(0.15 0.028 260)";
+const INPUT_BORDER = "oklch(0.28 0.048 255)";
+const TEXT_MAIN = "oklch(0.95 0.008 250)";
+const TEXT_MUTED = "oklch(0.62 0.03 250)";
+const EMERALD = "oklch(0.68 0.19 150)";
+const EMERALD_DIM = "oklch(0.68 0.19 150 / 0.15)";
+const EMERALD_BORDER = "oklch(0.68 0.19 150 / 0.35)";
+const AMBER = "oklch(0.82 0.16 80)";
+const AMBER_DIM = "oklch(0.82 0.16 80 / 0.12)";
+const AMBER_BORDER = "oklch(0.82 0.16 80 / 0.35)";
+const TEAL_DIM = "oklch(0.72 0.18 195 / 0.12)";
+const TEAL_BORDER = "oklch(0.72 0.18 195 / 0.3)";
+
 export default function EmployeeAuth({ onNavigate }: Props) {
   const [tab, setTab] = useState<"login" | "register">("login");
   const [step, setStep] = useState<Step>("tabs");
@@ -67,7 +84,6 @@ export default function EmployeeAuth({ onNavigate }: Props) {
   const [pinError, setPinError] = useState("");
   const [lockMessage, setLockMessage] = useState<string | null>(null);
 
-  // Check lock on emp code change
   useEffect(() => {
     if (!empCode.trim()) {
       setLockMessage(null);
@@ -87,7 +103,8 @@ export default function EmployeeAuth({ onNavigate }: Props) {
     try {
       const result = await backend.registerEmployee(regName, regSurname);
       setRegResult(result);
-    } catch {
+    } catch (err) {
+      console.error("registerEmployee error:", err);
       toast.error("Kayıt sırasında hata oluştu");
     } finally {
       setLoading(false);
@@ -126,7 +143,6 @@ export default function EmployeeAuth({ onNavigate }: Props) {
         return;
       }
       clearLockInfo(lockKey);
-      // Track login history
       const histKey = `login_history_${emp.employeeId}`;
       const prevHistory = JSON.parse(
         localStorage.getItem(histKey) || "[]",
@@ -147,7 +163,6 @@ export default function EmployeeAuth({ onNavigate }: Props) {
         role: role,
       }));
       setCompanies(options);
-      // Check if PIN is set
       const pinSet = localStorage.getItem(`pin_set_${emp.employeeId}`);
       if (pinSet === "1") {
         setStep("pin-verify");
@@ -199,11 +214,48 @@ export default function EmployeeAuth({ onNavigate }: Props) {
     onNavigate("employee-dashboard");
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    border: `1px solid ${INPUT_BORDER}`,
+    borderRadius: "0.75rem",
+    padding: "0.625rem 0.75rem",
+    fontSize: "0.875rem",
+    outline: "none",
+    background: INPUT_BG,
+    color: TEXT_MAIN,
+  };
+
+  const headerStyle: React.CSSProperties = {
+    background: "oklch(0.16 0.038 260 / 0.9)",
+    backdropFilter: "blur(16px)",
+    borderBottom: `1px solid ${CARD_BORDER}`,
+    padding: "0.75rem 1rem",
+    display: "flex",
+    alignItems: "center",
+    gap: "0.75rem",
+  };
+
+  const backBtnStyle: React.CSSProperties = {
+    padding: "0.375rem",
+    borderRadius: "0.5rem",
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    color: TEXT_MUTED,
+  };
+
   // PIN verify step
   if (step === "pin-verify" && employeeData) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <header className="glass-header px-4 py-3 flex items-center gap-3">
+      <div
+        style={{
+          minHeight: "100vh",
+          background: BG,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <header style={headerStyle}>
           <button
             type="button"
             data-ocid="employee_auth.back.button"
@@ -212,39 +264,95 @@ export default function EmployeeAuth({ onNavigate }: Props) {
               setPin("");
               setPinError("");
             }}
-            className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            style={backBtnStyle}
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft style={{ width: 16, height: 16 }} />
           </button>
-          <h1 className="font-display font-semibold text-foreground text-sm">
+          <span
+            style={{ fontWeight: 600, color: TEXT_MAIN, fontSize: "0.875rem" }}
+          >
             PIN Doğrulama
-          </h1>
+          </span>
         </header>
-        <div className="flex-1 flex items-start justify-center p-6 pt-12">
-          <div className="w-full max-w-sm">
-            <div className="bg-card rounded-2xl shadow-card border border-border p-6 space-y-5">
-              <div className="text-center">
-                <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                  <KeyRound className="w-6 h-6 text-emerald-600" />
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            padding: "3rem 1.5rem",
+          }}
+        >
+          <div style={{ width: "100%", maxWidth: 384 }}>
+            <div
+              style={{
+                background: CARD_BG,
+                borderRadius: "1rem",
+                border: `1px solid ${CARD_BORDER}`,
+                padding: "1.5rem",
+              }}
+            >
+              <div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
+                <div
+                  style={{
+                    width: 48,
+                    height: 48,
+                    background: EMERALD_DIM,
+                    borderRadius: "0.875rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    margin: "0 auto 0.75rem",
+                  }}
+                >
+                  <KeyRound style={{ width: 24, height: 24, color: EMERALD }} />
                 </div>
-                <h2 className="font-display font-semibold text-foreground">
+                <h2
+                  style={{
+                    fontWeight: 700,
+                    color: TEXT_MAIN,
+                    fontSize: "1rem",
+                    margin: 0,
+                  }}
+                >
                   PIN Girin
                 </h2>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p
+                  style={{
+                    fontSize: "0.8125rem",
+                    color: TEXT_MUTED,
+                    marginTop: "0.25rem",
+                  }}
+                >
                   {employeeData.name} {employeeData.surname} · PIN doğrulaması
                   gerekiyor
                 </p>
               </div>
-              <form onSubmit={handlePinVerify} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="pin-input"
-                    className="block text-sm font-medium text-foreground"
+              <form
+                onSubmit={handlePinVerify}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "1rem",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.375rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "0.875rem",
+                      fontWeight: 500,
+                      color: TEXT_MAIN,
+                    }}
                   >
                     PIN (4-6 rakam)
-                  </label>
+                  </div>
                   <input
-                    id="pin-input"
                     data-ocid="employee_auth.pin.input"
                     type="password"
                     inputMode="numeric"
@@ -255,12 +363,22 @@ export default function EmployeeAuth({ onNavigate }: Props) {
                     }}
                     placeholder="PIN kodunuzu girin"
                     maxLength={6}
-                    className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono bg-secondary/50 text-foreground placeholder:text-muted-foreground text-center tracking-widest text-lg"
+                    style={{
+                      ...inputStyle,
+                      textAlign: "center",
+                      letterSpacing: "0.2em",
+                      fontSize: "1.125rem",
+                      fontFamily: "monospace",
+                    }}
                   />
                   {pinError && (
                     <p
                       data-ocid="employee_auth.pin.error_state"
-                      className="text-xs text-red-600"
+                      style={{
+                        fontSize: "0.75rem",
+                        color: "oklch(0.62 0.22 15)",
+                        margin: 0,
+                      }}
                     >
                       {pinError}
                     </p>
@@ -270,7 +388,17 @@ export default function EmployeeAuth({ onNavigate }: Props) {
                   data-ocid="employee_auth.pin.submit_button"
                   type="submit"
                   disabled={loading || !pin.trim()}
-                  className="w-full bg-emerald-700 text-white py-2.5 rounded-xl font-medium hover:bg-emerald-800 transition-colors disabled:opacity-50 text-sm"
+                  style={{
+                    width: "100%",
+                    padding: "0.625rem",
+                    borderRadius: "0.75rem",
+                    border: "none",
+                    background: EMERALD,
+                    color: "oklch(0.12 0.04 160)",
+                    fontWeight: 600,
+                    fontSize: "0.875rem",
+                    cursor: "pointer",
+                  }}
                 >
                   {loading ? "Doğrulanıyor..." : "Devam Et"}
                 </button>
@@ -284,23 +412,48 @@ export default function EmployeeAuth({ onNavigate }: Props) {
 
   if (step === "select-company" && employeeData) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <header className="glass-header px-4 py-3 flex items-center gap-3">
+      <div
+        style={{
+          minHeight: "100vh",
+          background: BG,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <header style={headerStyle}>
           <button
             type="button"
             data-ocid="employee_auth.back.button"
             onClick={() => setStep("tabs")}
-            className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+            style={backBtnStyle}
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft style={{ width: 16, height: 16 }} />
           </button>
-          <h1 className="font-display font-semibold text-foreground text-sm">
+          <span
+            style={{ fontWeight: 600, color: TEXT_MAIN, fontSize: "0.875rem" }}
+          >
             Şirket Seçin
-          </h1>
+          </span>
         </header>
-        <div className="flex-1 p-6 max-w-md mx-auto w-full">
-          <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 mb-5">
-            <p className="text-sm text-foreground">
+        <div
+          style={{
+            flex: 1,
+            padding: "1.5rem",
+            maxWidth: 448,
+            margin: "0 auto",
+            width: "100%",
+          }}
+        >
+          <div
+            style={{
+              background: TEAL_DIM,
+              border: `1px solid ${TEAL_BORDER}`,
+              borderRadius: "0.875rem",
+              padding: "0.75rem 1rem",
+              marginBottom: "1.25rem",
+            }}
+          >
+            <p style={{ fontSize: "0.875rem", color: TEXT_MAIN, margin: 0 }}>
               Hoş geldiniz,{" "}
               <strong>
                 {employeeData.name} {employeeData.surname}
@@ -309,7 +462,14 @@ export default function EmployeeAuth({ onNavigate }: Props) {
             </p>
           </div>
           {companies.length > 0 ? (
-            <div className="space-y-2.5 mb-5">
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.625rem",
+                marginBottom: "1.25rem",
+              }}
+            >
               {companies.map((c, i) => (
                 <button
                   type="button"
@@ -318,20 +478,53 @@ export default function EmployeeAuth({ onNavigate }: Props) {
                   onClick={() =>
                     selectCompany(c.companyId, c.companyName, c.role)
                   }
-                  className="w-full bg-card/80 border border-border rounded-2xl p-4 text-left hover:border-primary/40 hover:bg-primary/5 hover:shadow-glow transition-all group"
+                  style={{
+                    background: CARD_BG,
+                    border: `1px solid ${CARD_BORDER}`,
+                    borderRadius: "1rem",
+                    padding: "1rem",
+                    textAlign: "left",
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = EMERALD_BORDER;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = CARD_BORDER;
+                  }}
                 >
-                  <div className="font-display font-medium text-foreground">
+                  <div
+                    style={{
+                      fontWeight: 600,
+                      color: TEXT_MAIN,
+                      fontSize: "0.9375rem",
+                    }}
+                  >
                     {c.companyName}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
+                  <div
+                    style={{
+                      fontSize: "0.75rem",
+                      color: TEXT_MUTED,
+                      marginTop: "0.2rem",
+                    }}
+                  >
                     {roleLabel(c.role)}
                   </div>
                 </button>
               ))}
             </div>
           ) : (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
-              <p className="text-sm text-amber-800">
+            <div
+              style={{
+                background: AMBER_DIM,
+                border: `1px solid ${AMBER_BORDER}`,
+                borderRadius: "0.875rem",
+                padding: "1rem",
+              }}
+            >
+              <p style={{ fontSize: "0.875rem", color: AMBER, margin: 0 }}>
                 Henüz hiçbir şirkete bağlı değilsiniz. Şirket yöneticisinden
                 sizi sisteme eklemesini isteyin.
               </p>
@@ -343,67 +536,122 @@ export default function EmployeeAuth({ onNavigate }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <header className="glass-header px-4 py-3 flex items-center gap-3">
+    <div
+      style={{
+        minHeight: "100vh",
+        background: BG,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <header style={headerStyle}>
         <button
           type="button"
           data-ocid="employee_auth.back.button"
           onClick={() => onNavigate("landing")}
-          className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          style={backBtnStyle}
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft style={{ width: 16, height: 16 }} />
         </button>
-        <div className="flex items-center gap-2">
-          <UserCog className="w-4 h-4 text-emerald-600" />
-          <h1 className="font-display font-semibold text-foreground text-sm">
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: "0.5rem",
+              background: EMERALD_DIM,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <UserCog style={{ width: 14, height: 14, color: EMERALD }} />
+          </div>
+          <span
+            style={{ fontWeight: 600, color: TEXT_MAIN, fontSize: "0.875rem" }}
+          >
             Personel Kayıt / Giriş
-          </h1>
+          </span>
         </div>
       </header>
 
-      <div className="flex-1 flex items-start justify-center p-6 pt-12">
-        <div className="w-full max-w-md">
-          <div className="flex bg-muted rounded-xl p-1 mb-6 gap-1">
-            <button
-              type="button"
-              data-ocid="employee_auth.login.tab"
-              onClick={() => setTab("login")}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                tab === "login"
-                  ? "bg-primary/20 text-primary shadow-xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Giriş Yap
-            </button>
-            <button
-              type="button"
-              data-ocid="employee_auth.register.tab"
-              onClick={() => setTab("register")}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                tab === "register"
-                  ? "bg-primary/20 text-primary shadow-xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Kayıt Ol
-            </button>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "center",
+          padding: "3rem 1.5rem 1.5rem",
+        }}
+      >
+        <div style={{ width: "100%", maxWidth: 448 }}>
+          {/* Tab switcher */}
+          <div
+            style={{
+              display: "flex",
+              background: MUTED_BG,
+              borderRadius: "0.875rem",
+              padding: "0.25rem",
+              marginBottom: "1.5rem",
+              gap: "0.25rem",
+            }}
+          >
+            {(["login", "register"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                data-ocid={`employee_auth.${t}.tab`}
+                onClick={() => setTab(t)}
+                style={{
+                  flex: 1,
+                  padding: "0.5rem",
+                  borderRadius: "0.625rem",
+                  fontSize: "0.875rem",
+                  fontWeight: tab === t ? 600 : 400,
+                  border: "none",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  background: tab === t ? EMERALD_DIM : "transparent",
+                  color: tab === t ? EMERALD : TEXT_MUTED,
+                  outline: tab === t ? `1px solid ${EMERALD_BORDER}` : "none",
+                }}
+              >
+                {t === "login" ? "Giriş Yap" : "Kayıt Ol"}
+              </button>
+            ))}
           </div>
 
+          {/* Login form */}
           {tab === "login" && (
             <form
               onSubmit={handleLogin}
-              className="bg-card rounded-2xl shadow-card border border-border p-6 space-y-5"
+              style={{
+                background: CARD_BG,
+                borderRadius: "1rem",
+                border: `1px solid ${CARD_BORDER}`,
+                padding: "1.5rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "1.25rem",
+              }}
             >
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="ea-emp-code"
-                  className="block text-sm font-medium text-foreground"
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.375rem",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    color: TEXT_MAIN,
+                  }}
                 >
                   Personel Kodu (8 hane)
-                </label>
+                </div>
                 <input
-                  id="ea-emp-code"
                   data-ocid="employee_auth.emp_code.input"
                   value={empCode}
                   onChange={(e) => {
@@ -412,97 +660,227 @@ export default function EmployeeAuth({ onNavigate }: Props) {
                   }}
                   placeholder="Personel kodunuzu girin"
                   maxLength={8}
-                  className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono bg-secondary/50 text-foreground placeholder:text-muted-foreground"
+                  style={{
+                    ...inputStyle,
+                    fontFamily: "monospace",
+                    letterSpacing: "0.1em",
+                  }}
                 />
               </div>
               {lockMessage && (
                 <div
                   data-ocid="employee_auth.lock.error_state"
-                  className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3"
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "0.5rem",
+                    background: "oklch(0.4 0.18 15 / 0.12)",
+                    border: "1px solid oklch(0.62 0.22 15 / 0.35)",
+                    borderRadius: "0.75rem",
+                    padding: "0.75rem",
+                  }}
                 >
-                  <Clock className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-red-700">{lockMessage}</p>
+                  <Clock
+                    style={{
+                      width: 14,
+                      height: 14,
+                      color: "oklch(0.62 0.22 15)",
+                      flexShrink: 0,
+                      marginTop: 1,
+                    }}
+                  />
+                  <p
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "oklch(0.82 0.12 15)",
+                      margin: 0,
+                    }}
+                  >
+                    {lockMessage}
+                  </p>
                 </div>
               )}
               <button
                 data-ocid="employee_auth.login.submit_button"
                 type="submit"
                 disabled={loading || !!lockMessage}
-                className="w-full bg-emerald-700 text-white py-2.5 rounded-xl font-medium hover:bg-emerald-800 transition-colors disabled:opacity-50 text-sm"
+                style={{
+                  width: "100%",
+                  padding: "0.625rem",
+                  borderRadius: "0.75rem",
+                  border: "none",
+                  background: EMERALD,
+                  color: "oklch(0.12 0.04 160)",
+                  fontWeight: 600,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
+                }}
               >
                 {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
               </button>
             </form>
           )}
 
+          {/* Register form */}
           {tab === "register" && !regResult && (
             <form
               onSubmit={handleRegister}
-              className="bg-card rounded-2xl shadow-card border border-border p-6 space-y-4"
+              style={{
+                background: CARD_BG,
+                borderRadius: "1rem",
+                border: `1px solid ${CARD_BORDER}`,
+                padding: "1.5rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "1rem",
+              }}
             >
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="ea-reg-name"
-                  className="block text-sm font-medium text-foreground"
+              {[
+                {
+                  label: "Ad",
+                  value: regName,
+                  setter: setRegName,
+                  placeholder: "Adınız",
+                  ocid: "employee_auth.reg_name.input",
+                },
+                {
+                  label: "Soyad",
+                  value: regSurname,
+                  setter: setRegSurname,
+                  placeholder: "Soyadınız",
+                  ocid: "employee_auth.reg_surname.input",
+                },
+              ].map((f) => (
+                <div
+                  key={f.label}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.375rem",
+                  }}
                 >
-                  Ad
-                </label>
-                <input
-                  id="ea-reg-name"
-                  data-ocid="employee_auth.reg_name.input"
-                  value={regName}
-                  onChange={(e) => setRegName(e.target.value)}
-                  placeholder="Adınız"
-                  className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-secondary/50 text-foreground placeholder:text-muted-foreground"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label
-                  htmlFor="ea-reg-surname"
-                  className="block text-sm font-medium text-foreground"
-                >
-                  Soyad
-                </label>
-                <input
-                  id="ea-reg-surname"
-                  data-ocid="employee_auth.reg_surname.input"
-                  value={regSurname}
-                  onChange={(e) => setRegSurname(e.target.value)}
-                  placeholder="Soyadınız"
-                  className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-secondary/50 text-foreground placeholder:text-muted-foreground"
-                />
-              </div>
+                  <div
+                    style={{
+                      fontSize: "0.875rem",
+                      fontWeight: 500,
+                      color: TEXT_MAIN,
+                    }}
+                  >
+                    {f.label}
+                  </div>
+                  <input
+                    data-ocid={f.ocid}
+                    value={f.value}
+                    onChange={(e) => f.setter(e.target.value)}
+                    placeholder={f.placeholder}
+                    style={inputStyle}
+                  />
+                </div>
+              ))}
               <button
                 data-ocid="employee_auth.register.submit_button"
                 type="submit"
                 disabled={loading}
-                className="w-full bg-emerald-700 text-white py-2.5 rounded-xl font-medium hover:bg-emerald-800 transition-colors disabled:opacity-50 text-sm"
+                style={{
+                  width: "100%",
+                  padding: "0.625rem",
+                  borderRadius: "0.75rem",
+                  border: "none",
+                  background: EMERALD,
+                  color: "oklch(0.12 0.04 160)",
+                  fontWeight: 600,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
+                  marginTop: "0.25rem",
+                }}
               >
                 {loading ? "Kaydediliyor..." : "Personel Kaydı Oluştur"}
               </button>
             </form>
           )}
 
+          {/* Register success */}
           {tab === "register" && regResult && (
-            <div className="bg-card rounded-2xl shadow-card border border-border p-6 space-y-5 animate-fade-in">
-              <div className="text-center">
-                <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+            <div
+              style={{
+                background: CARD_BG,
+                borderRadius: "1rem",
+                border: `1px solid ${CARD_BORDER}`,
+                padding: "1.5rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "1.25rem",
+              }}
+            >
+              <div style={{ textAlign: "center" }}>
+                <div
+                  style={{
+                    width: 48,
+                    height: 48,
+                    background: EMERALD_DIM,
+                    borderRadius: "0.875rem",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    margin: "0 auto 0.75rem",
+                  }}
+                >
+                  <CheckCircle2
+                    style={{ width: 24, height: 24, color: EMERALD }}
+                  />
                 </div>
-                <h2 className="font-display font-semibold text-foreground">
+                <h2
+                  style={{
+                    fontWeight: 700,
+                    color: TEXT_MAIN,
+                    fontSize: "1rem",
+                    margin: 0,
+                  }}
+                >
                   Kayıt Başarılı!
                 </h2>
               </div>
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                <div className="text-xs font-semibold text-emerald-700 uppercase tracking-wider mb-1">
+              <div
+                style={{
+                  background: EMERALD_DIM,
+                  border: `1px solid ${EMERALD_BORDER}`,
+                  borderRadius: "0.875rem",
+                  padding: "1rem",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "0.6875rem",
+                    fontWeight: 700,
+                    color: EMERALD,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                    marginBottom: "0.375rem",
+                  }}
+                >
                   Personel Kodunuz (8 hane)
                 </div>
-                <div className="font-mono text-2xl font-bold text-emerald-900 tracking-widest mt-1">
+                <div
+                  style={{
+                    fontFamily: "monospace",
+                    fontSize: "1.5rem",
+                    fontWeight: 700,
+                    color: TEXT_MAIN,
+                    letterSpacing: "0.2em",
+                  }}
+                >
                   {regResult}
                 </div>
               </div>
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-                <p className="text-xs text-amber-800">
+              <div
+                style={{
+                  background: AMBER_DIM,
+                  border: `1px solid ${AMBER_BORDER}`,
+                  borderRadius: "0.75rem",
+                  padding: "0.75rem",
+                }}
+              >
+                <p style={{ fontSize: "0.75rem", color: AMBER, margin: 0 }}>
                   ⚠️ Bu kodu kaydediniz! Giriş yapmak için kullanacaksınız.
                 </p>
               </div>
@@ -513,7 +891,17 @@ export default function EmployeeAuth({ onNavigate }: Props) {
                   setTab("login");
                   setRegResult(null);
                 }}
-                className="w-full bg-emerald-700 text-white py-2.5 rounded-xl font-medium hover:bg-emerald-800 transition-colors text-sm"
+                style={{
+                  width: "100%",
+                  padding: "0.625rem",
+                  borderRadius: "0.75rem",
+                  border: "none",
+                  background: EMERALD,
+                  color: "oklch(0.12 0.04 160)",
+                  fontWeight: 600,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
+                }}
               >
                 Giriş Yap
               </button>

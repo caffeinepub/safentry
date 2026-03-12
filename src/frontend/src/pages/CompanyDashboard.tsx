@@ -11,15 +11,22 @@ import {
 import {
   Ban,
   BarChart3,
+  Bell,
   Building2,
   Calendar,
   Check,
   Clipboard,
   Clock,
+  Database,
+  FileDown,
+  History,
   ImagePlus,
+  KeyRound,
   Loader2,
   LogOut,
+  MapPin,
   Medal,
+  Megaphone,
   Pencil,
   Repeat2,
   TrendingUp,
@@ -33,6 +40,7 @@ import type { Screen } from "../App";
 import EmployeeManager from "../components/EmployeeManager";
 import HourlyDensityChart from "../components/HourlyDensityChart";
 import PurposeDistributionChart from "../components/PurposeDistributionChart";
+import RolePermissions from "../components/RolePermissions";
 import VisitorList from "../components/VisitorList";
 import WeeklyVisitorChart from "../components/WeeklyVisitorChart";
 import { backend } from "../lib/backendSingleton";
@@ -114,6 +122,43 @@ export default function CompanyDashboard({ onNavigate }: Props) {
   const [workingHoursStart, setWorkingHoursStart] = useState("09:00");
   const [workingHoursEnd, setWorkingHoursEnd] = useState("18:00");
 
+  // KVKK/GDPR Retention
+  const [retentionPeriod, setRetentionPeriod] = useState("Sınırsız");
+  const [retentionSaving, setRetentionSaving] = useState(false);
+
+  // Visitor Limit
+  const [visitorLimit, setVisitorLimit] = useState(50);
+  const [visitorLimitSaving, setVisitorLimitSaving] = useState(false);
+
+  // Access Zones
+  const [accessZones, setAccessZones] = useState<string[]>([]);
+  const [newZoneInput, setNewZoneInput] = useState("");
+
+  // Announcement Board
+  const [announcementText, setAnnouncementText] = useState("");
+  const [announcements, setAnnouncements] = useState<
+    { id: string; text: string; createdAt: string; authorName: string }[]
+  >([]);
+  const [announcementPosting, setAnnouncementPosting] = useState(false);
+
+  // PIN Reset modal
+  const [showResetPinModal, setShowResetPinModal] = useState(false);
+  const [resetPinTarget, setResetPinTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [pinResetSaving, setPinResetSaving] = useState(false);
+
+  // Login History modal
+  const [showLoginHistoryModal, setShowLoginHistoryModal] = useState(false);
+  const [loginHistoryTarget, setLoginHistoryTarget] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [loginHistory, setLoginHistory] = useState<string[]>([]);
+
   useEffect(() => {
     const data = sessionStorage.getItem("safentry_company");
     if (!data) {
@@ -128,6 +173,44 @@ export default function CompanyDashboard({ onNavigate }: Props) {
       const { start, end } = JSON.parse(wh) as { start: string; end: string };
       setWorkingHoursStart(start);
       setWorkingHoursEnd(end);
+    }
+    // Load retention policy
+    const ret = localStorage.getItem(`retention_${parsed.companyId}`);
+    if (ret) setRetentionPeriod(ret);
+    // Load visitor limit
+    const vl = localStorage.getItem(`visitor_limit_${parsed.companyId}`);
+    if (vl) setVisitorLimit(Number(vl));
+    // Load access zones
+    const az = localStorage.getItem(`accessZones_${parsed.companyId}`);
+    if (az) {
+      try {
+        setAccessZones(JSON.parse(az));
+      } catch {
+        setAccessZones([]);
+      }
+    }
+    // Load announcements
+    const ann = localStorage.getItem(`announcements_${parsed.companyId}`);
+    if (ann) setAnnouncements(JSON.parse(ann));
+    // Run KVKK cleanup
+    const retVal = ret || "Sınırsız";
+    if (retVal !== "Sınırsız") {
+      const now = Date.now();
+      const periodMs =
+        retVal === "6 Ay"
+          ? 6 * 30 * 24 * 3600 * 1000
+          : retVal === "1 Yıl"
+            ? 365 * 24 * 3600 * 1000
+            : 2 * 365 * 24 * 3600 * 1000;
+      const cutoff = now - periodMs;
+      // Cleanup is done passively - records older than retention will be filtered in display
+      // Store cutoff for VisitorList to use
+      localStorage.setItem(
+        `retention_cutoff_${parsed.companyId}`,
+        String(cutoff),
+      );
+    } else {
+      localStorage.removeItem(`retention_cutoff_${parsed.companyId}`);
     }
 
     backend
@@ -382,7 +465,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="bg-white border-b border-border px-4 py-3 flex items-center justify-between">
+      <header className="glass-header px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden flex-shrink-0">
             {companyLogo ? (
@@ -415,7 +498,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
         </button>
       </header>
 
-      <nav className="border-b border-border bg-white">
+      <nav className="glass-header">
         <div className="flex px-4">
           <TabBtn
             active={tab === "visitors"}
@@ -460,6 +543,20 @@ export default function CompanyDashboard({ onNavigate }: Props) {
           <EmployeeManager
             companyId={company.companyId}
             loginCode={company.loginCode}
+            isCompanyOwner={true}
+            onResetPin={(empId, name) => {
+              setResetPinTarget({ id: empId, name });
+              setNewPin("");
+              setConfirmPin("");
+              setShowResetPinModal(true);
+            }}
+            onViewHistory={(empId, name) => {
+              setLoginHistoryTarget({ id: empId, name });
+              const raw = localStorage.getItem(`login_history_${empId}`);
+              const hist = raw ? (JSON.parse(raw) as string[]) : [];
+              setLoginHistory(hist.slice(-10).reverse());
+              setShowLoginHistoryModal(true);
+            }}
           />
         )}
         {tab === "stats" && (
@@ -542,12 +639,12 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                   {companyAvgSatisfaction !== null && (
                     <div
                       data-ocid="company_dash.avg_satisfaction.card"
-                      className="rounded-2xl border p-5 bg-amber-50 border-amber-200"
+                      className="rounded-2xl border p-5 bg-amber-500/15 border-amber-500/40"
                     >
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3 bg-amber-100 text-amber-700">
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3 bg-amber-500/20 text-amber-400">
                         <TrendingUp className="w-5 h-5" />
                       </div>
-                      <div className="text-3xl font-display font-bold text-amber-800">
+                      <div className="text-3xl font-display font-bold text-amber-400">
                         {companyAvgSatisfaction} ★
                       </div>
                       <div className="text-sm text-muted-foreground mt-1">
@@ -572,7 +669,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                 {topPersons.length > 0 && (
                   <div
                     data-ocid="top_visited.panel"
-                    className="bg-white border border-border rounded-2xl p-5"
+                    className="bg-card/80 border border-border/60 rounded-2xl p-5 backdrop-blur-sm"
                   >
                     <div className="flex items-center gap-2 mb-4">
                       <Medal className="w-4 h-4 text-amber-500" />
@@ -584,11 +681,11 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                       {topPersons.map(([name, count], i) => {
                         const medalColor =
                           i === 0
-                            ? "bg-amber-100 text-amber-700"
+                            ? "bg-amber-500/20 text-amber-400"
                             : i === 1
-                              ? "bg-slate-100 text-slate-600"
+                              ? "bg-muted/60 text-muted-foreground"
                               : i === 2
-                                ? "bg-orange-100 text-orange-700"
+                                ? "bg-amber-500/15 text-amber-500"
                                 : "bg-muted text-muted-foreground";
                         return (
                           <div
@@ -617,7 +714,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                 {frequentVisitors.length > 0 && (
                   <div
                     data-ocid="company_dash.frequent_visitors.section"
-                    className="bg-white border border-border rounded-2xl p-5"
+                    className="bg-card/80 border border-border/60 rounded-2xl p-5 backdrop-blur-sm"
                   >
                     <div className="flex items-center gap-2 mb-4">
                       <Repeat2 className="w-4 h-4 text-violet-500" />
@@ -632,7 +729,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                           data-ocid={`company_dash.frequent_visitor.item.${i + 1}`}
                           className="flex items-center gap-3"
                         >
-                          <span className="w-6 h-6 rounded-full bg-violet-50 flex items-center justify-center text-xs font-bold text-violet-600">
+                          <span className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary">
                             {i + 1}
                           </span>
                           <span className="flex-1 text-sm text-foreground truncate">
@@ -649,7 +746,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                 {/* Date Range PDF Report */}
                 <div
                   data-ocid="date_report.panel"
-                  className="bg-white border border-border rounded-2xl p-5"
+                  className="bg-card/80 border border-border/60 rounded-2xl p-5 backdrop-blur-sm"
                 >
                   <div className="flex items-center gap-2 mb-4">
                     <Calendar className="w-4 h-4 text-blue-500" />
@@ -758,7 +855,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
             className="p-6 max-w-lg space-y-4"
           >
             {/* Logo Upload Section */}
-            <div className="bg-white border border-border rounded-2xl p-5">
+            <div className="bg-card/80 border border-border/60 rounded-2xl p-5 backdrop-blur-sm">
               <div className="flex items-center gap-2 mb-4">
                 <ImagePlus className="w-4 h-4 text-primary" />
                 <h3 className="text-sm font-semibold text-foreground">
@@ -830,7 +927,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
             </div>
 
             {/* Company Info */}
-            <div className="bg-white border border-border rounded-2xl p-5 space-y-4">
+            <div className="bg-card/80 border border-border/60 rounded-2xl p-5 space-y-4 backdrop-blur-sm">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-primary" />
@@ -855,7 +952,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
             </div>
 
             {/* Login Code */}
-            <div className="bg-white border border-border rounded-2xl p-5">
+            <div className="bg-card/80 border border-border/60 rounded-2xl p-5 backdrop-blur-sm">
               <h3 className="text-sm font-semibold text-foreground mb-3">
                 Giriş Kodu
               </h3>
@@ -886,7 +983,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
             {/* Working Hours Section */}
             <div
               data-ocid="company_dash.working_hours.panel"
-              className="bg-white border border-border rounded-2xl p-5"
+              className="bg-card/80 border border-border/60 rounded-2xl p-5 backdrop-blur-sm"
             >
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="w-4 h-4 text-blue-500" />
@@ -952,10 +1049,336 @@ export default function CompanyDashboard({ onNavigate }: Props) {
               </button>
             </div>
 
+            {/* Visitor Limit */}
+            <div className="bg-card/80 border border-border/60 rounded-2xl p-5 space-y-4 backdrop-blur-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <Users className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Eşzamanlı Ziyaretçi Kapasitesi
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Aynı anda binada bulunabilecek maksimum ziyaretçi sayısını
+                belirleyin. Limit aşıldığında personele uyarı gösterilir.
+              </p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  data-ocid="company_dash.visitor_limit.input"
+                  min={1}
+                  max={500}
+                  value={visitorLimit}
+                  onChange={(e) => setVisitorLimit(Number(e.target.value))}
+                  className="flex-1 border border-border rounded-xl px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <button
+                  type="button"
+                  data-ocid="company_dash.visitor_limit.save_button"
+                  disabled={visitorLimitSaving}
+                  onClick={() => {
+                    if (!company) return;
+                    setVisitorLimitSaving(true);
+                    localStorage.setItem(
+                      `visitor_limit_${company.companyId}`,
+                      String(visitorLimit),
+                    );
+                    toast.success("Kapasite limiti kaydedildi");
+                    setTimeout(() => setVisitorLimitSaving(false), 500);
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  {visitorLimitSaving ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : null}
+                  Kaydet
+                </button>
+              </div>
+            </div>
+
+            {/* Announcement Board */}
+            <div className="bg-card/80 border border-border/60 rounded-2xl p-5 space-y-4 backdrop-blur-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <Megaphone className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Duyuru Panosu
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Tüm personele görünecek duyurular oluşturun. Son 10 duyuru
+                saklanır.
+              </p>
+              <div className="space-y-2">
+                <textarea
+                  data-ocid="company_dash.announcement.textarea"
+                  value={announcementText}
+                  onChange={(e) => setAnnouncementText(e.target.value)}
+                  placeholder="Duyuru metnini yazın..."
+                  rows={3}
+                  className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                />
+                <button
+                  type="button"
+                  data-ocid="company_dash.announcement.submit_button"
+                  disabled={announcementPosting || !announcementText.trim()}
+                  onClick={() => {
+                    if (!company || !announcementText.trim()) return;
+                    setAnnouncementPosting(true);
+                    const updated = [
+                      {
+                        id: Date.now().toString(),
+                        text: announcementText.trim(),
+                        createdAt: new Date().toISOString(),
+                        authorName: company.name,
+                      },
+                      ...announcements,
+                    ].slice(0, 10);
+                    localStorage.setItem(
+                      `announcements_${company.companyId}`,
+                      JSON.stringify(updated),
+                    );
+                    setAnnouncements(updated);
+                    setAnnouncementText("");
+                    toast.success("Duyuru yayınlandı");
+                    setTimeout(() => setAnnouncementPosting(false), 300);
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {announcementPosting ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Bell className="w-3 h-3" />
+                  )}
+                  Duyuru Yayınla
+                </button>
+              </div>
+              {announcements.length === 0 ? (
+                <div
+                  data-ocid="company_dash.announcement.empty_state"
+                  className="text-center py-6 text-xs text-muted-foreground"
+                >
+                  Henüz duyuru oluşturulmadı
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {announcements.map((ann, i) => (
+                    <div
+                      key={ann.id}
+                      data-ocid={`company_dash.announcement.item.${i + 1}`}
+                      className="flex items-start justify-between gap-2 bg-muted/30 border border-border rounded-xl p-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-foreground whitespace-pre-wrap">
+                          {ann.text}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {new Date(ann.createdAt).toLocaleDateString("tr-TR", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {" · "}
+                          {ann.authorName}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        data-ocid={`company_dash.announcement.delete_button.${i + 1}`}
+                        onClick={() => {
+                          if (!company) return;
+                          const updated = announcements.filter(
+                            (a) => a.id !== ann.id,
+                          );
+                          localStorage.setItem(
+                            `announcements_${company.companyId}`,
+                            JSON.stringify(updated),
+                          );
+                          setAnnouncements(updated);
+                          toast.success("Duyuru silindi");
+                        }}
+                        className="flex-shrink-0 text-muted-foreground hover:text-destructive p-1 rounded-lg hover:bg-destructive/10 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* KVKK/GDPR Retention Policy */}
+            <div className="bg-card/80 border border-border/60 rounded-2xl p-5 space-y-4 backdrop-blur-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <Database className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Veri Saklama Politikası (KVKK)
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Ziyaretçi kayıtlarının saklanacağı maksimum süreyi belirleyin.
+                Süresi dolan kayıtlar gösterimden kaldırılır.
+              </p>
+              <div className="flex items-center gap-3">
+                <select
+                  data-ocid="company_dash.retention.select"
+                  value={retentionPeriod}
+                  onChange={(e) => setRetentionPeriod(e.target.value)}
+                  className="flex-1 border border-border rounded-xl px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="6 Ay">6 Ay</option>
+                  <option value="1 Yıl">1 Yıl</option>
+                  <option value="2 Yıl">2 Yıl</option>
+                  <option value="Sınırsız">Sınırsız</option>
+                </select>
+                <button
+                  type="button"
+                  data-ocid="company_dash.retention.save_button"
+                  disabled={retentionSaving}
+                  onClick={() => {
+                    if (!company) return;
+                    setRetentionSaving(true);
+                    localStorage.setItem(
+                      `retention_${company.companyId}`,
+                      retentionPeriod,
+                    );
+                    if (retentionPeriod !== "Sınırsız") {
+                      const periodMs =
+                        retentionPeriod === "6 Ay"
+                          ? 6 * 30 * 24 * 3600 * 1000
+                          : retentionPeriod === "1 Yıl"
+                            ? 365 * 24 * 3600 * 1000
+                            : 2 * 365 * 24 * 3600 * 1000;
+                      localStorage.setItem(
+                        `retention_cutoff_${company.companyId}`,
+                        String(Date.now() - periodMs),
+                      );
+                    } else {
+                      localStorage.removeItem(
+                        `retention_cutoff_${company.companyId}`,
+                      );
+                    }
+                    toast.success("Veri saklama politikası kaydedildi");
+                    setTimeout(() => setRetentionSaving(false), 500);
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2.5 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  {retentionSaving ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : null}
+                  Kaydet
+                </button>
+              </div>
+            </div>
+
+            {/* Role Permissions */}
+            {company && <RolePermissions companyId={company.companyId} />}
+
+            {/* Access Zones Section */}
+            <div
+              data-ocid="company_dash.access_zones.section"
+              className="bg-card/80 border border-border/60 rounded-2xl p-5 backdrop-blur-sm"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <MapPin className="w-4 h-4 text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">
+                  Erişim Bölgeleri
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Binalardaki kat veya bölge isimlerini tanımlayın. Ziyaretçi
+                kaydında bu bölgeler seçilebilir.
+              </p>
+              <div className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  data-ocid="company_dash.access_zones.input"
+                  value={newZoneInput}
+                  onChange={(e) => setNewZoneInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const z = newZoneInput.trim();
+                      if (z && !accessZones.includes(z)) {
+                        const updated = [...accessZones, z];
+                        setAccessZones(updated);
+                        if (company)
+                          localStorage.setItem(
+                            `accessZones_${company.companyId}`,
+                            JSON.stringify(updated),
+                          );
+                        setNewZoneInput("");
+                      }
+                    }
+                  }}
+                  placeholder="Örn: Kat 1, Toplantı Odası..."
+                  className="flex-1 border border-border rounded-xl px-3 py-2 text-sm bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <button
+                  type="button"
+                  data-ocid="company_dash.access_zones.add_button"
+                  onClick={() => {
+                    const z = newZoneInput.trim();
+                    if (!z || accessZones.includes(z)) return;
+                    const updated = [...accessZones, z];
+                    setAccessZones(updated);
+                    if (company)
+                      localStorage.setItem(
+                        `accessZones_${company.companyId}`,
+                        JSON.stringify(updated),
+                      );
+                    setNewZoneInput("");
+                    toast.success("Bölge eklendi");
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  Ekle
+                </button>
+              </div>
+              {accessZones.length === 0 ? (
+                <p
+                  data-ocid="company_dash.access_zones.empty_state"
+                  className="text-xs text-muted-foreground text-center py-4"
+                >
+                  Henüz bölge tanımlanmamış
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {accessZones.map((zone, idx) => (
+                    <span
+                      key={zone}
+                      data-ocid={`company_dash.access_zones.item.${idx + 1}`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20"
+                    >
+                      <MapPin className="w-3 h-3" />
+                      {zone}
+                      <button
+                        type="button"
+                        data-ocid={`company_dash.access_zones.delete_button.${idx + 1}`}
+                        onClick={() => {
+                          const updated = accessZones.filter((z) => z !== zone);
+                          setAccessZones(updated);
+                          if (company)
+                            localStorage.setItem(
+                              `accessZones_${company.companyId}`,
+                              JSON.stringify(updated),
+                            );
+                          toast.success("Bölge silindi");
+                        }}
+                        className="ml-1 text-primary/60 hover:text-red-500 transition-colors"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Blacklist Section */}
             <div
               data-ocid="company_dash.blacklist.section"
-              className="bg-white border border-border rounded-2xl p-5"
+              className="bg-card/80 border border-border/60 rounded-2xl p-5 backdrop-blur-sm"
             >
               <div className="flex items-center gap-2 mb-4">
                 <Ban className="w-4 h-4 text-red-500" />
@@ -982,7 +1405,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                     }
                     placeholder="TC Kimlik No (11 hane)"
                     maxLength={11}
-                    className="flex-1 border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white font-mono"
+                    className="flex-1 border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-secondary/50 font-mono"
                   />
                   <button
                     type="submit"
@@ -1003,7 +1426,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                   value={blReason}
                   onChange={(e) => setBlReason(e.target.value)}
                   placeholder="Engelleme sebebi"
-                  className="w-full border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white"
+                  className="w-full border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-secondary/50"
                 />
               </form>
 
@@ -1030,11 +1453,11 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                     <div
                       key={entry.tcId}
                       data-ocid={`company_dash.blacklist.item.${i + 1}`}
-                      className="flex items-start gap-3 p-3 bg-red-50 border border-red-100 rounded-xl"
+                      className="flex items-start gap-3 p-3 bg-destructive/15 border border-destructive/30 rounded-xl"
                     >
                       <Ban className="w-3.5 h-3.5 text-red-500 mt-0.5 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-mono font-semibold text-red-800">
+                        <p className="text-sm font-mono font-semibold text-destructive">
                           {entry.tcId}
                         </p>
                         {entry.reason && (
@@ -1047,7 +1470,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                         type="button"
                         data-ocid={`company_dash.blacklist.remove.button.${i + 1}`}
                         onClick={() => setConfirmBlacklistRemoveId(entry.tcId)}
-                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-colors flex-shrink-0"
+                        className="p-1.5 text-destructive hover:text-destructive/80 hover:bg-destructive/15 rounded-lg transition-colors flex-shrink-0"
                         title="Listeden çıkar"
                       >
                         <X className="w-3.5 h-3.5" />
@@ -1129,7 +1552,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
           data-ocid="company_dash.profile.dialog"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
         >
-          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full mx-4 space-y-4">
+          <div className="glass-panel rounded-2xl shadow-elevated p-6 max-w-md w-full mx-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -1191,7 +1614,7 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                     data-ocid={f.ocid}
                     value={f.value}
                     onChange={(e) => f.setter(e.target.value)}
-                    className="w-full border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white text-foreground"
+                    className="w-full border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-secondary/50 text-foreground"
                   />
                 </div>
               ))}
@@ -1217,6 +1640,204 @@ export default function CompanyDashboard({ onNavigate }: Props) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* PIN Reset Modal */}
+      {showResetPinModal && resetPinTarget && (
+        <div
+          data-ocid="company_dash.reset_pin.dialog"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        >
+          <div className="glass-panel rounded-2xl shadow-elevated p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                  <KeyRound className="w-4 h-4 text-amber-600" />
+                </div>
+                <div>
+                  <h3 className="font-display font-semibold text-foreground text-sm">
+                    PIN Sıfırla
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {resetPinTarget.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                data-ocid="company_dash.reset_pin.close_button"
+                onClick={() => setShowResetPinModal(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newPin || newPin.length < 4) {
+                  toast.error("PIN en az 4 karakter olmalıdır");
+                  return;
+                }
+                if (newPin !== confirmPin) {
+                  toast.error("PIN'ler eşleşmiyor");
+                  return;
+                }
+                setPinResetSaving(true);
+                try {
+                  await (
+                    backend as {
+                      setEmployeePin: (
+                        id: string,
+                        pin: string,
+                      ) => Promise<void>;
+                    }
+                  ).setEmployeePin(resetPinTarget.id, newPin);
+                  localStorage.setItem(`pin_set_${resetPinTarget.id}`, "1");
+                  toast.success("PIN başarıyla sıfırlandı");
+                  setShowResetPinModal(false);
+                  setNewPin("");
+                  setConfirmPin("");
+                } catch {
+                  toast.error("PIN sıfırlanamadı");
+                } finally {
+                  setPinResetSaving(false);
+                }
+              }}
+              className="space-y-3"
+            >
+              <div className="space-y-1">
+                <label
+                  htmlFor="new-pin-input"
+                  className="text-xs font-medium text-foreground"
+                >
+                  Yeni PIN
+                </label>
+                <input
+                  id="new-pin-input"
+                  type="password"
+                  data-ocid="company_dash.reset_pin.new.input"
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value)}
+                  placeholder="Yeni PIN girin"
+                  className="w-full border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-secondary/50 text-foreground"
+                />
+              </div>
+              <div className="space-y-1">
+                <label
+                  htmlFor="confirm-pin-input"
+                  className="text-xs font-medium text-foreground"
+                >
+                  PIN Tekrar
+                </label>
+                <input
+                  id="confirm-pin-input"
+                  type="password"
+                  data-ocid="company_dash.reset_pin.confirm.input"
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value)}
+                  placeholder="PIN'i tekrar girin"
+                  className="w-full border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-secondary/50 text-foreground"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  data-ocid="company_dash.reset_pin.cancel_button"
+                  onClick={() => setShowResetPinModal(false)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  data-ocid="company_dash.reset_pin.save_button"
+                  disabled={pinResetSaving}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-amber-500 text-white hover:bg-amber-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {pinResetSaving && (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  )}
+                  Sıfırla
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Login History Modal */}
+      {showLoginHistoryModal && loginHistoryTarget && (
+        <div
+          data-ocid="company_dash.login_history.dialog"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        >
+          <div className="glass-panel rounded-2xl shadow-elevated p-6 max-w-md w-full mx-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center">
+                  <History className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-display font-semibold text-foreground text-sm">
+                    Oturum Geçmişi
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {loginHistoryTarget.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                data-ocid="company_dash.login_history.close_button"
+                onClick={() => setShowLoginHistoryModal(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {loginHistory.length === 0 ? (
+              <div
+                data-ocid="company_dash.login_history.empty_state"
+                className="text-center py-8 text-muted-foreground"
+              >
+                <Clock className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">Kayıtlı oturum geçmişi yok</p>
+              </div>
+            ) : (
+              <div className="space-y-1 max-h-72 overflow-y-auto">
+                <div className="grid grid-cols-2 gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b border-border">
+                  <span>Tarih / Saat</span>
+                  <span>Durum</span>
+                </div>
+                {loginHistory.map((ts, i) => (
+                  <div
+                    key={ts}
+                    data-ocid={`company_dash.login_history.item.${i + 1}`}
+                    className="grid grid-cols-2 gap-2 px-3 py-2.5 text-sm rounded-xl hover:bg-muted/40 transition-colors"
+                  >
+                    <span className="text-foreground font-mono text-xs">
+                      {new Date(ts).toLocaleString("tr-TR")}
+                    </span>
+                    <span className="text-emerald-600 text-xs font-medium flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      Başarılı Giriş
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                data-ocid="company_dash.login_history.close_button"
+                onClick={() => setShowLoginHistoryModal(false)}
+                className="px-4 py-2 rounded-xl text-sm font-medium border border-border text-foreground hover:bg-muted transition-colors"
+              >
+                Kapat
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1280,29 +1901,29 @@ function StatCard({
 }) {
   const colorMap = {
     primary: {
-      card: "bg-primary/5 border-primary/20",
-      icon: "bg-primary/10 text-primary",
+      card: "stat-card-teal",
+      icon: "bg-primary/20 text-primary",
       value: "text-primary",
     },
     emerald: {
-      card: "bg-emerald-50 border-emerald-200",
-      icon: "bg-emerald-100 text-emerald-700",
-      value: "text-emerald-800",
+      card: "stat-card-emerald",
+      icon: "bg-emerald-500/20 text-emerald-400",
+      value: "text-emerald-400",
     },
     blue: {
-      card: "bg-blue-50 border-blue-200",
-      icon: "bg-blue-100 text-blue-700",
-      value: "text-blue-800",
+      card: "stat-card-blue",
+      icon: "bg-violet-500/20 text-violet-400",
+      value: "text-violet-400",
     },
     amber: {
-      card: "bg-amber-50 border-amber-200",
-      icon: "bg-amber-100 text-amber-700",
-      value: "text-amber-800",
+      card: "stat-card-amber",
+      icon: "bg-amber-500/20 text-amber-400",
+      value: "text-amber-400",
     },
   };
   const c = colorMap[color];
   return (
-    <div data-ocid={dataOcid} className={`rounded-2xl border p-5 ${c.card}`}>
+    <div data-ocid={dataOcid} className={`rounded-2xl p-5 ${c.card}`}>
       <div
         className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${c.icon}`}
       >

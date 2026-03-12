@@ -110,7 +110,7 @@ export default function CompanyAuth({ onNavigate }: Props) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="bg-white border-b border-border px-4 py-3 flex items-center gap-3">
+      <header className="glass-header px-4 py-3 flex items-center gap-3">
         <button
           type="button"
           data-ocid="company_auth.back.button"
@@ -137,7 +137,7 @@ export default function CompanyAuth({ onNavigate }: Props) {
               onClick={() => setTab("login")}
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
                 tab === "login"
-                  ? "bg-white shadow-xs text-foreground"
+                  ? "bg-primary/20 text-primary shadow-xs font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -149,7 +149,7 @@ export default function CompanyAuth({ onNavigate }: Props) {
               onClick={() => setTab("register")}
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
                 tab === "register"
-                  ? "bg-white shadow-xs text-foreground"
+                  ? "bg-primary/20 text-primary shadow-xs font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -160,7 +160,7 @@ export default function CompanyAuth({ onNavigate }: Props) {
           {tab === "login" && (
             <form
               onSubmit={handleLogin}
-              className="bg-white rounded-2xl shadow-card border border-border p-6 space-y-5"
+              className="bg-card rounded-2xl shadow-card border border-border p-6 space-y-5"
             >
               <div className="space-y-1.5">
                 <label
@@ -180,7 +180,7 @@ export default function CompanyAuth({ onNavigate }: Props) {
                   }}
                   placeholder="12 haneli giriş kodunuz"
                   maxLength={12}
-                  className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono bg-white text-foreground placeholder:text-muted-foreground"
+                  className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono bg-secondary/50 text-foreground placeholder:text-muted-foreground"
                 />
               </div>
               {lockMessage && (
@@ -206,7 +206,7 @@ export default function CompanyAuth({ onNavigate }: Props) {
           {tab === "register" && !regResult && (
             <form
               onSubmit={handleRegister}
-              className="bg-white rounded-2xl shadow-card border border-border p-6 space-y-4"
+              className="bg-card rounded-2xl shadow-card border border-border p-6 space-y-4"
             >
               {[
                 {
@@ -255,7 +255,7 @@ export default function CompanyAuth({ onNavigate }: Props) {
                     value={f.value}
                     onChange={(e) => f.setter(e.target.value)}
                     placeholder={f.placeholder}
-                    className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white text-foreground placeholder:text-muted-foreground"
+                    className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-secondary/50 text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
               ))}
@@ -271,7 +271,7 @@ export default function CompanyAuth({ onNavigate }: Props) {
           )}
 
           {tab === "register" && regResult && (
-            <div className="bg-white rounded-2xl shadow-card border border-border p-6 space-y-5 animate-fade-in">
+            <div className="bg-card rounded-2xl shadow-card border border-border p-6 space-y-5 animate-fade-in">
               <div className="text-center">
                 <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
                   <CheckCircle2 className="w-6 h-6 text-emerald-600" />

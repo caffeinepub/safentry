@@ -149,6 +149,16 @@ actor {
   let companyBlacklist = Map.empty<Text, BlacklistEntry>();
   let vehicleAccessRecords = Map.empty<Text, VehicleAccess>();
   let auditLogs = Map.empty<Text, AuditLog>();
+  
+  // Personnel invite codes: code -> {companyId, role, usedBy, createdAt}
+  type PersonnelInviteCode = {
+    code : Text;
+    companyId : Text;
+    role : EmployeeRole;
+    createdAt : Time.Time;
+    usedBy : ?Text; // employeeId if used
+  };
+  let personnelInviteCodes = Map.empty<Text, PersonnelInviteCode>();
 
   // Helper functions
   func generateRandomText(length : Nat) : Text {
@@ -1332,6 +1342,89 @@ actor {
       func(visitor) {
         visitor.companyId == companyId and visitor.tcId == tcId
       }
+    );
+  };
+
+  // Generate a personnel invite code (company owner/authorized)
+  public shared ({ caller }) func generatePersonnelInviteCode(loginCode : Text, role : EmployeeRole) : async Text {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    switch (getEmployeeRole(companyId, callerEmployeeId)) {
+      case (? #owner) {};
+      case (? #authorized) {};
+      case (_) { Runtime.trap("Unauthorized: Only owner or authorized can generate invite codes") };
+    };
+
+    let code = generateRandomText(10);
+    let invite : PersonnelInviteCode = {
+      code;
+      companyId;
+      role;
+      createdAt = Time.now();
+      usedBy = null;
+    };
+    personnelInviteCodes.add(code, invite);
+    code;
+  };
+
+  // Use a personnel invite code to join a company
+  public shared ({ caller }) func usePersonnelInviteCode(code : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    let callerEmployeeId = switch (getEmployeeIdFromCaller(caller)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Unauthorized: Caller is not registered as an employee") };
+    };
+
+    switch (personnelInviteCodes.get(code)) {
+      case (?invite) {
+        switch (invite.usedBy) {
+          case (?_) { Runtime.trap("Invite code already used") };
+          case (null) {
+            let key = getCombinedKey(invite.companyId, callerEmployeeId);
+            companyEmployees.add(key, invite.role);
+            let updated : PersonnelInviteCode = {
+              code = invite.code;
+              companyId = invite.companyId;
+              role = invite.role;
+              createdAt = invite.createdAt;
+              usedBy = ?callerEmployeeId;
+            };
+            personnelInviteCodes.add(code, updated);
+          };
+        };
+      };
+      case (null) { Runtime.trap("Invalid invite code") };
+    };
+  };
+
+  // Get personnel invite codes for a company
+  public query ({ caller }) func getPersonnelInviteCodes(loginCode : Text) : async [PersonnelInviteCode] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #guest))) {
+      Runtime.trap("Unauthorized: Authentication required");
+    };
+
+    let companyId = switch (getCompanyIdByLoginCode(loginCode)) {
+      case (?id) { id };
+      case (null) { Runtime.trap("Invalid login code") };
+    };
+
+    personnelInviteCodes.values().toArray().filter(
+      func(invite) { invite.companyId == companyId }
     );
   };
 };

@@ -2,6 +2,7 @@ import { AlertTriangle, Ban } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { backend } from "../lib/backendSingleton";
+import CompanionManager, { type Companion } from "./CompanionManager";
 import VisitorDocument from "./VisitorDocument";
 
 interface Props {
@@ -48,6 +49,9 @@ export default function VisitorRegisterForm({
   const [recurringCount, setRecurringCount] = useState<number | null>(null);
   const [isBlacklisted, setIsBlacklisted] = useState(false);
   const [autoFilled, setAutoFilled] = useState(false);
+  const [companions, setCompanions] = useState<Companion[]>([]);
+  const [selectedZone, setSelectedZone] = useState("");
+  const [availableZones, setAvailableZones] = useState<string[]>([]);
   const recurringTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -65,6 +69,18 @@ export default function VisitorRegisterForm({
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
   }, []);
+
+  // Load access zones for this company
+  useEffect(() => {
+    const stored = localStorage.getItem(`accessZones_${companyId}`);
+    if (stored) {
+      try {
+        setAvailableZones(JSON.parse(stored));
+      } catch {
+        setAvailableZones([]);
+      }
+    }
+  }, [companyId]);
 
   // Recurring visitor + blacklist check — debounced when tcId hits exactly 11 chars
   useEffect(() => {
@@ -211,7 +227,22 @@ export default function VisitorRegisterForm({
         sigData,
         vehiclePlate || null,
       );
-      setSavedVisitorId(visitorId);
+      setSavedVisitorId(visitorId as string);
+      // Store host approval status
+      if (visitingPerson) {
+        localStorage.setItem(`hostApproval_${visitorId}`, "pending");
+      }
+      // Store access zone
+      if (selectedZone) {
+        localStorage.setItem(`visitorZone_${visitorId}`, selectedZone);
+      }
+      // Store companions
+      if (companions.length > 0) {
+        localStorage.setItem(
+          `companions_${visitorId}`,
+          JSON.stringify(companions),
+        );
+      }
       toast.success("Ziyaretçi kaydedildi");
     } catch {
       toast.error("Ziyaretçi kaydedilemedi");
@@ -236,6 +267,8 @@ export default function VisitorRegisterForm({
     setRecurringCount(null);
     setIsBlacklisted(false);
     setAutoFilled(false);
+    setCompanions([]);
+    setSelectedZone("");
     clearSignature();
   };
 
@@ -464,6 +497,32 @@ export default function VisitorRegisterForm({
         )}
       </div>
 
+      {/* Access Zone Selector */}
+      {availableZones.length > 0 && (
+        <div>
+          <label
+            htmlFor="vf-zone"
+            className="block text-xs font-medium text-slate-600 mb-1"
+          >
+            Erişim Bölgesi
+          </label>
+          <select
+            id="vf-zone"
+            data-ocid="visitor_form.zone.select"
+            value={selectedZone}
+            onChange={(e) => setSelectedZone(e.target.value)}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+          >
+            <option value="">Seçiniz (İsteğe bağlı)</option>
+            {availableZones.map((z) => (
+              <option key={z} value={z}>
+                {z}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div>
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs font-medium text-slate-600">
@@ -498,6 +557,9 @@ export default function VisitorRegisterForm({
           </p>
         )}
       </div>
+
+      {/* Companions */}
+      <CompanionManager companions={companions} onChange={setCompanions} />
 
       {/* NDA Checkbox */}
       <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">

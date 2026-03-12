@@ -165,4 +165,11 @@ export interface backendInterface {
     updateVisitorSignature(visitorId: string, companyId: string, signatureData: string): Promise<void>;
     verifyDocument(documentCode: string): Promise<VerifyDocumentResult | null>;
     verifyEmployeePin(employeeId: string, pin: string): Promise<boolean>;
+    addEmployeeToCompanyAsCompany(loginCode: string, employeeId: string, role: EmployeeRole): Promise<void>;
+    removeEmployeeFromCompanyAsCompany(loginCode: string, targetEmployeeId: string): Promise<void>;
+    setEmployeeRoleAsCompany(loginCode: string, targetEmployeeId: string, role: EmployeeRole): Promise<void>;
+    getCompanyEmployeesAsCompany(loginCode: string): Promise<Array<{ role: EmployeeRole; employee: Employee }>>;
+    generatePersonnelInviteCode(loginCode: string, role: EmployeeRole): Promise<string>;
+    usePersonnelInviteCode(code: string): Promise<void>;
+    getPersonnelInviteCodes(loginCode: string): Promise<Array<{ code: string; companyId: string; role: EmployeeRole; createdAt: bigint; usedBy: [] | [string] }>>;
 }

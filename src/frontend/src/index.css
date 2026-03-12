@@ -4,6 +4,13 @@
 
 /* ─── Fonts ─────────────────────────────────────────────────────────────── */
 @font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/assets/fonts/PlusJakartaSans[wght].woff2") format("woff2");
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@font-face {
   font-family: "Bricolage Grotesque";
   src: url("/assets/fonts/BricolageGrotesque[opsz,wdth,wght].woff2")
     format("woff2");
@@ -21,57 +28,57 @@
 /* ─── Design Tokens ──────────────────────────────────────────────────────── */
 @layer base {
   :root {
-    /* Backgrounds */
-    --background: 0.97 0.006 252;
-    --foreground: 0.14 0.025 260;
+    /* Backgrounds — deep navy */
+    --background: 0.13 0.035 262;
+    --foreground: 0.96 0.008 250;
 
-    /* Cards & surfaces */
-    --card: 1 0 0;
-    --card-foreground: 0.14 0.025 260;
-    --popover: 1 0 0;
-    --popover-foreground: 0.14 0.025 260;
+    /* Cards & surfaces — layered navy glass */
+    --card: 0.18 0.042 258;
+    --card-foreground: 0.96 0.008 250;
+    --popover: 0.16 0.04 258;
+    --popover-foreground: 0.96 0.008 250;
 
-    /* Primary: deep teal-navy */
-    --primary: 0.32 0.12 222;
-    --primary-foreground: 0.98 0.005 222;
+    /* Primary — electric teal/cyan */
+    --primary: 0.72 0.18 195;
+    --primary-foreground: 0.12 0.04 250;
 
-    /* Secondary */
-    --secondary: 0.93 0.015 252;
-    --secondary-foreground: 0.3 0.06 260;
+    /* Secondary — midnight blue */
+    --secondary: 0.22 0.055 258;
+    --secondary-foreground: 0.86 0.025 250;
 
     /* Muted */
-    --muted: 0.94 0.01 252;
-    --muted-foreground: 0.52 0.03 260;
+    --muted: 0.2 0.03 258;
+    --muted-foreground: 0.62 0.035 250;
 
-    /* Accent: bright teal */
-    --accent: 0.62 0.18 205;
-    --accent-foreground: 1 0 0;
+    /* Accent — amber/gold */
+    --accent: 0.82 0.16 80;
+    --accent-foreground: 0.15 0.04 80;
 
     /* Destructive */
-    --destructive: 0.52 0.22 25;
-    --destructive-foreground: 0.98 0.005 25;
+    --destructive: 0.62 0.22 15;
+    --destructive-foreground: 0.97 0.005 15;
 
     /* Borders & inputs */
-    --border: 0.88 0.014 252;
-    --input: 0.88 0.014 252;
-    --ring: 0.32 0.12 222;
+    --border: 0.28 0.048 255;
+    --input: 0.22 0.04 258;
+    --ring: 0.72 0.18 195;
 
-    /* Charts */
-    --chart-1: 0.62 0.18 205;
-    --chart-2: 0.55 0.16 150;
-    --chart-3: 0.72 0.16 62;
-    --chart-4: 0.52 0.22 25;
-    --chart-5: 0.32 0.12 222;
+    /* Charts — vibrant palette */
+    --chart-1: 0.72 0.18 195;
+    --chart-2: 0.82 0.16 80;
+    --chart-3: 0.6 0.2 270;
+    --chart-4: 0.68 0.19 150;
+    --chart-5: 0.72 0.22 350;
 
-    /* Sidebar */
-    --sidebar: 0.17 0.03 265;
-    --sidebar-foreground: 0.92 0.01 252;
-    --sidebar-primary: 0.62 0.18 205;
-    --sidebar-primary-foreground: 0.14 0.025 260;
-    --sidebar-accent: 0.25 0.04 265;
-    --sidebar-accent-foreground: 0.92 0.01 252;
-    --sidebar-border: 0.25 0.04 265;
-    --sidebar-ring: 0.62 0.18 205;
+    /* Sidebar — darkest navy */
+    --sidebar: 0.1 0.03 262;
+    --sidebar-foreground: 0.92 0.01 250;
+    --sidebar-primary: 0.72 0.18 195;
+    --sidebar-primary-foreground: 0.12 0.04 250;
+    --sidebar-accent: 0.16 0.04 258;
+    --sidebar-accent-foreground: 0.86 0.025 250;
+    --sidebar-border: 0.2 0.04 258;
+    --sidebar-ring: 0.72 0.18 195;
 
     /* Shape */
     --radius: 0.625rem;
@@ -83,15 +90,79 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: "General Sans", system-ui, sans-serif;
+    font-family: "Plus Jakarta Sans", "General Sans", system-ui, sans-serif;
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
+    background: linear-gradient(
+      135deg,
+      oklch(0.11 0.04 265) 0%,
+      oklch(0.14 0.034 258) 40%,
+      oklch(0.12 0.048 248) 100%
+    );
+    background-attachment: fixed;
   }
 }
 
 /* ─── Typography ─────────────────────────────────────────────────────────── */
 .font-display {
   font-family: "Bricolage Grotesque", system-ui, sans-serif;
+}
+
+/* ─── Glassmorphism helpers ──────────────────────────────────────────────── */
+.glass-panel {
+  background: oklch(var(--card) / 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid oklch(var(--border) / 0.6);
+}
+
+.glass-header {
+  background: oklch(var(--card) / 0.9);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid oklch(var(--border) / 0.5);
+}
+
+/* ─── Stat card gradients ────────────────────────────────────────────────── */
+.stat-card-teal {
+  background: linear-gradient(
+    135deg,
+    oklch(0.72 0.18 195 / 0.18) 0%,
+    oklch(0.6 0.16 210 / 0.1) 100%
+  );
+  border: 1px solid oklch(0.72 0.18 195 / 0.3);
+}
+.stat-card-amber {
+  background: linear-gradient(
+    135deg,
+    oklch(0.82 0.16 80 / 0.18) 0%,
+    oklch(0.75 0.18 65 / 0.1) 100%
+  );
+  border: 1px solid oklch(0.82 0.16 80 / 0.3);
+}
+.stat-card-emerald {
+  background: linear-gradient(
+    135deg,
+    oklch(0.68 0.19 150 / 0.18) 0%,
+    oklch(0.6 0.18 160 / 0.1) 100%
+  );
+  border: 1px solid oklch(0.68 0.19 150 / 0.3);
+}
+.stat-card-blue {
+  background: linear-gradient(
+    135deg,
+    oklch(0.6 0.2 270 / 0.18) 0%,
+    oklch(0.55 0.18 255 / 0.1) 100%
+  );
+  border: 1px solid oklch(0.6 0.2 270 / 0.3);
+}
+.stat-card-pink {
+  background: linear-gradient(
+    135deg,
+    oklch(0.72 0.22 350 / 0.18) 0%,
+    oklch(0.65 0.2 340 / 0.1) 100%
+  );
+  border: 1px solid oklch(0.72 0.22 350 / 0.3);
 }
 
 /* ─── Print ──────────────────────────────────────────────────────────────── */

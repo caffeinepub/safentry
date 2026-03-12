@@ -7,17 +7,22 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  Key,
   KeyRound,
   Link2,
   List,
   Loader2,
   LogOut,
+  MapPin,
   Medal,
+  Package,
   Plus,
   Repeat2,
   Shield,
   SmilePlus,
   Star,
+  ThumbsDown,
+  ThumbsUp,
   TrendingUp,
   Upload,
   UserPlus,
@@ -27,10 +32,15 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Screen } from "../App";
+import AssetManager, {
+  hasUnreturnedAssets,
+  loadAssets,
+} from "../components/AssetManager";
 import EmployeeManager from "../components/EmployeeManager";
 import HourlyDensityChart from "../components/HourlyDensityChart";
 import KioskMode from "../components/KioskMode";
 import PurposeDistributionChart from "../components/PurposeDistributionChart";
+import { loadRolePermissions } from "../components/RolePermissions";
 import VisitorList from "../components/VisitorList";
 import VisitorRegisterForm from "../components/VisitorRegisterForm";
 import WeeklyVisitorChart from "../components/WeeklyVisitorChart";
@@ -49,7 +59,9 @@ type Tab =
   | "stats"
   | "davetler"
   | "kayitlar"
-  | "sira";
+  | "sira"
+  | "duyuru"
+  | "approvals";
 
 interface Visitor {
   entryTime: bigint;
@@ -132,6 +144,9 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
   const [activeVisitors, setActiveVisitors] = useState<Visitor[]>([]);
   const [securityLoading, setSecurityLoading] = useState(false);
   const [checkingOutId, setCheckingOutId] = useState<string | null>(null);
+  const [showAssetModal, setShowAssetModal] = useState(false);
+  const [assetVisitorId, setAssetVisitorId] = useState<string | null>(null);
+  const [assetVisitorName, setAssetVisitorName] = useState("");
   const securityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Evacuation modal
@@ -143,6 +158,9 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
 
   // PIN change modal
   const [showPinModal, setShowPinModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joining, setJoining] = useState(false);
   const [kioskMode, setKioskMode] = useState(false);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -212,6 +230,25 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
   );
   const [creating, setCreating] = useState(false);
   const [createdCode, setCreatedCode] = useState<string | null>(null);
+  const [createAppointmentDate, setCreateAppointmentDate] = useState("");
+  const [createAppointmentTime, setCreateAppointmentTime] = useState("");
+
+  // Announcement banner state
+  const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState<
+    string | null
+  >(null);
+
+  // Host Approvals state
+  const [pendingApprovals, setPendingApprovals] = useState<
+    Array<{
+      visitorId: string;
+      name: string;
+      surname: string;
+      visitingPerson: string;
+      visitPurpose: string;
+      entryTime: bigint;
+    }>
+  >([]);
 
   // Finalize invite modal
   const [showFinalizeModal, setShowFinalizeModal] = useState(false);
@@ -420,6 +457,30 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
     setAvailability(status);
     if (employee) {
       localStorage.setItem(`availability_${employee.employeeId}`, status);
+    }
+  };
+
+  const handleJoinWithInviteCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinCode.trim()) {
+      toast.error("Davet kodu gerekli");
+      return;
+    }
+    setJoining(true);
+    try {
+      const fn = backend.usePersonnelInviteCode.bind(backend);
+      await fn(joinCode.trim());
+      toast.success("Şirkete başarıyla katıldınız! Sayfayı yenileyiniz.");
+      setShowJoinModal(false);
+      setJoinCode("");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("already used"))
+        toast.error("Bu davet kodu zaten kullanılmış");
+      else if (msg.includes("Invalid")) toast.error("Geçersiz davet kodu");
+      else toast.error("Katılanamadı");
+    } finally {
+      setJoining(false);
     }
   };
 
@@ -634,6 +695,27 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
       toast.error("Kimi ziyaret edeceğini belirtiniz");
       return;
     }
+    // Check appointment conflict
+    if (createAppointmentDate && createAppointmentTime) {
+      const conflict = invites.some((inv) => {
+        const appt = localStorage.getItem(`appt_${inv.inviteCode}`);
+        if (!appt) return false;
+        const { date, time } = JSON.parse(appt) as {
+          date: string;
+          time: string;
+        };
+        return (
+          date === createAppointmentDate &&
+          time === createAppointmentTime &&
+          inv.status === "pending"
+        );
+      });
+      if (conflict) {
+        toast.warning(
+          "Bu saatte başka bir randevu var, devam etmek istiyor musunuz?",
+        );
+      }
+    }
     setCreating(true);
     try {
       const code = await backend.createInvite(
@@ -641,6 +723,16 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
         createVisitingPerson.trim(),
         createVisitPurpose,
       );
+      // Store appointment info
+      if (createAppointmentDate && createAppointmentTime && code) {
+        localStorage.setItem(
+          `appt_${code}`,
+          JSON.stringify({
+            date: createAppointmentDate,
+            time: createAppointmentTime,
+          }),
+        );
+      }
       setCreatedCode(code as string);
       await loadInvites(company.companyId);
     } catch {
@@ -773,7 +865,28 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
   };
 
   const canManageEmployees = role === "owner";
-  const canViewStats = role === "owner" || role === "authorized";
+  const rolePerms = company ? loadRolePermissions(company.companyId) : null;
+  const canViewStats =
+    role === "owner" ||
+    (role === "authorized" && (rolePerms?.authorized.reportsAccess ?? true)) ||
+    (role === "registrar" && (rolePerms?.registrar.reportsAccess ?? false));
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _canManageBlacklist =
+    role === "owner" ||
+    (role === "authorized" &&
+      (rolePerms?.authorized.blacklistManage ?? true)) ||
+    (role === "registrar" && (rolePerms?.registrar.blacklistManage ?? false));
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _canExport =
+    role === "owner" ||
+    (role === "authorized" && (rolePerms?.authorized.exportData ?? true)) ||
+    (role === "registrar" && (rolePerms?.registrar.exportData ?? false));
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _canViewAnnouncements =
+    role === "owner" ||
+    (role === "authorized" &&
+      (rolePerms?.authorized.viewAnnouncements ?? true)) ||
+    (role === "registrar" && (rolePerms?.registrar.viewAnnouncements ?? true));
 
   // Compute frequent visitors (top 5 with count > 1)
   const frequentVisitors = (() => {
@@ -838,10 +951,10 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="bg-white border-b border-border px-4 py-3 flex items-center justify-between">
+      <header className="glass-header px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
-            <span className="text-sm font-display font-bold text-emerald-700">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+            <span className="text-sm font-display font-bold text-emerald-400">
               {employee.name.charAt(0)}
               {employee.surname.charAt(0)}
             </span>
@@ -860,11 +973,21 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             type="button"
             data-ocid="kiosk.open_modal_button"
             onClick={() => setKioskMode(true)}
-            className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors border border-emerald-200"
+            className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 px-3 py-1.5 rounded-lg transition-colors border border-primary/30"
             title="Kiosk Modu"
           >
             <BookOpen className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Kiosk</span>
+          </button>
+          <button
+            type="button"
+            data-ocid="employee_dash.join_company.button"
+            onClick={() => setShowJoinModal(true)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-lg transition-colors"
+            title="Davet Koduyla u015eirkete Katu0131l"
+          >
+            <Key className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Katu0131l</span>
           </button>
           <button
             type="button"
@@ -892,7 +1015,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
       {myActiveVisitors.length > 0 && (
         <div
           data-ocid="employee_dash.visitor_notification.card"
-          className="flex items-start gap-2 px-4 py-2.5 bg-blue-50 border-b border-blue-100 text-blue-800"
+          className="flex items-start gap-2 px-4 py-2.5 bg-primary/15 border-b border-primary/20 text-primary"
         >
           <Bell className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
           <div className="text-xs">
@@ -911,22 +1034,22 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
       {/* Summary banner */}
       <div
         data-ocid="employee_dash.today_summary.card"
-        className="flex items-center gap-4 px-4 py-2 bg-emerald-50 border-b border-emerald-100 text-emerald-800"
+        className="flex items-center gap-4 px-4 py-2 bg-emerald-500/15 border-b border-emerald-500/30 text-emerald-300"
       >
         <div className="flex items-center gap-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
           <span className="text-xs font-medium">
             Bugün: <span className="font-bold">{todayMyVisitors}</span>
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <Users className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+          <Users className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
           <span className="text-xs font-medium">
             Aktif: <span className="font-bold">{myActiveVisitors.length}</span>
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <TrendingUp className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+          <TrendingUp className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
           <span className="text-xs font-medium">
             Toplam: <span className="font-bold">{allMyVisitorsCount}</span>
           </span>
@@ -936,7 +1059,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             data-ocid="employee_dash.personnel_count.card"
             className="flex items-center gap-1.5"
           >
-            <Users className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+            <Users className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
             <span className="text-xs font-medium">
               Personel: <span className="font-bold">{totalPersonnel}</span>
             </span>
@@ -945,7 +1068,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
       </div>
 
       {/* Availability Status Card */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-white border-b border-border">
+      <div className="flex items-center gap-3 px-4 py-2 glass-header">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
           <SmilePlus className="w-3.5 h-3.5 flex-shrink-0" />
           <span className="hidden sm:inline">Durumunuz:</span>
@@ -962,15 +1085,15 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                 available:
                   availability === status
                     ? "bg-green-600 text-white border-green-600"
-                    : "text-green-700 border-green-300 hover:bg-green-50",
+                    : "text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/15",
                 in_meeting:
                   availability === status
                     ? "bg-amber-500 text-white border-amber-500"
-                    : "text-amber-700 border-amber-300 hover:bg-amber-50",
+                    : "text-amber-400 border-amber-500/40 hover:bg-amber-500/15",
                 out_of_office:
                   availability === status
                     ? "bg-red-600 text-white border-red-600"
-                    : "text-red-700 border-red-300 hover:bg-red-50",
+                    : "text-red-400 border-red-500/40 hover:bg-red-500/15",
               };
               return (
                 <button
@@ -989,15 +1112,56 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
       </div>
 
       {/* Working Hours Warning */}
+      {/* Announcement Banner */}
+      {company &&
+        (() => {
+          const ann = localStorage.getItem(
+            `announcements_${company.companyId}`,
+          );
+          if (!ann) return null;
+          const list = JSON.parse(ann) as {
+            id: string;
+            text: string;
+            createdAt: string;
+            authorName: string;
+          }[];
+          const sevenDaysAgo = Date.now() - 7 * 24 * 3600 * 1000;
+          const recent = list.filter(
+            (a) => new Date(a.createdAt).getTime() > sevenDaysAgo,
+          );
+          if (!recent.length) return null;
+          const latest = recent[0];
+          if (dismissedAnnouncementId === latest.id) return null;
+          return (
+            <div className="mx-4 mt-2 flex items-start gap-3 bg-amber-500/15 border border-amber-500/40 rounded-xl px-4 py-3">
+              <Bell className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-amber-300">Duyuru</p>
+                <p className="text-xs text-amber-300/80 line-clamp-2">
+                  {latest.text}
+                </p>
+              </div>
+              <button
+                type="button"
+                data-ocid="announcement_banner.close_button"
+                onClick={() => setDismissedAnnouncementId(latest.id)}
+                className="flex-shrink-0 text-amber-500 hover:text-amber-700 p-0.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          );
+        })()}
+
       {outsideWorkingHours && tab === "register" && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800">
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/15 border-b border-amber-500/30 text-amber-300">
           <span className="text-xs font-medium">
             ⚠ Mesai saatleri dışında kayıt yapılıyor
           </span>
         </div>
       )}
 
-      <nav className="border-b border-border bg-white">
+      <nav className="glass-header">
         <div className="flex px-4 overflow-x-auto">
           <TabBtn
             active={tab === "register"}
@@ -1068,12 +1232,79 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             icon={<Users className="w-4 h-4" />}
             label="Sıra"
           />
+          <TabBtn
+            active={tab === "duyuru"}
+            onClick={() => setTab("duyuru")}
+            ocid="employee_dash.duyuru.tab"
+            icon={<Bell className="w-4 h-4" />}
+            label="Duyurular"
+          />
+          <TabBtn
+            active={tab === "approvals"}
+            onClick={() => {
+              setTab("approvals");
+              // Load pending approvals for current employee
+              if (employee && company) {
+                const fullName = `${employee.name} ${employee.surname}`;
+                backend
+                  .getVisitors(company.companyId)
+                  .then((visitors) => {
+                    const pending = (visitors as any[])
+                      .filter((v: any) => {
+                        if (!v.exitTime && v.visitingPerson === fullName) {
+                          const status = localStorage.getItem(
+                            `hostApproval_${v.visitorId}`,
+                          );
+                          return status === "pending";
+                        }
+                        return false;
+                      })
+                      .map((v: any) => ({
+                        visitorId: v.visitorId,
+                        name: v.name,
+                        surname: v.surname,
+                        visitingPerson: v.visitingPerson,
+                        visitPurpose:
+                          typeof v.visitPurpose === "string"
+                            ? v.visitPurpose
+                            : "",
+                        entryTime: v.entryTime,
+                      }));
+                    setPendingApprovals(pending);
+                  })
+                  .catch(() => setPendingApprovals([]));
+              }
+            }}
+            ocid="employee_dash.approvals.tab"
+            icon={<ThumbsUp className="w-4 h-4" />}
+            label="Onaylar"
+          />
         </div>
       </nav>
 
       <main className="flex-1 overflow-auto">
         {tab === "register" && (
           <div>
+            {company &&
+              (() => {
+                const lim = localStorage.getItem(
+                  `visitor_limit_${company.companyId}`,
+                );
+                const limit = lim ? Number(lim) : 50;
+                const active = stats ? Number(stats.activeVisitorsToday) : 0;
+                if (active >= limit) {
+                  return (
+                    <div className="mx-4 mt-2 flex items-center gap-2 bg-amber-500/15 border border-amber-500/30 rounded-xl px-4 py-3 text-xs text-amber-400">
+                      <Users className="w-4 h-4 flex-shrink-0" />
+                      <span>
+                        Maksimum eşzamanlı ziyaretçi sayısına ulaşıldı ({limit}{" "}
+                        kişi)
+                      </span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             <VisitorRegisterForm
               companyId={company.companyId}
               employeeId={employee.employeeId}
@@ -1082,7 +1313,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
               <div className="px-4 pb-4 max-w-lg">
                 <div
                   data-ocid="availability.panel"
-                  className="bg-white border border-border rounded-2xl p-4"
+                  className="bg-card/80 border border-border/60 rounded-2xl p-4"
                 >
                   <div className="flex items-center gap-2 mb-3">
                     <Users className="w-3.5 h-3.5 text-muted-foreground" />
@@ -1094,10 +1325,11 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     {companyEmployees.slice(0, 10).map((emp) => {
                       const statusColors = {
                         available:
-                          "bg-green-50 text-green-700 border-green-200",
+                          "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
                         in_meeting:
-                          "bg-amber-50 text-amber-700 border-amber-200",
-                        out_of_office: "bg-red-50 text-red-700 border-red-200",
+                          "bg-amber-500/15 text-amber-400 border-amber-500/30",
+                        out_of_office:
+                          "bg-red-500/15 text-red-400 border-red-500/30",
                       };
                       const statusLabels = {
                         available: "Uygun",
@@ -1148,7 +1380,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                   if (e.key === "Escape") setShowEvacuation(false);
                 }}
               >
-                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden print:shadow-none print:rounded-none print:max-w-full print:mx-0">
+                <div className="glass-panel rounded-2xl shadow-elevated w-full max-w-2xl mx-4 overflow-hidden print:shadow-none print:rounded-none print:max-w-full print:mx-0">
                   <div className="flex items-center justify-between p-5 border-b border-border print:hidden">
                     <div>
                       <h2 className="font-semibold text-foreground">
@@ -1182,7 +1414,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                       <h1 className="text-lg font-bold">
                         {company?.companyName} — ACİL TAHLİYE LİSTESİ
                       </h1>
-                      <p className="text-sm text-gray-500">
+                      <p className="text-sm text-muted-foreground">
                         {new Date().toLocaleString("tr-TR")}
                       </p>
                     </div>
@@ -1215,38 +1447,81 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                           </tr>
                         </thead>
                         <tbody>
-                          {activeVisitors.map((v, i) => (
-                            <tr
-                              key={v.visitorId}
-                              className="border-b border-border/50 last:border-0"
-                            >
-                              <td className="py-2 pr-3 text-muted-foreground font-medium">
-                                {i + 1}
-                              </td>
-                              <td className="py-2 pr-3 font-medium">
-                                {v.name} {v.surname}
-                              </td>
-                              <td className="py-2 pr-3 text-muted-foreground hidden sm:table-cell">
-                                {v.tcId}
-                              </td>
-                              <td className="py-2 pr-3 text-muted-foreground">
-                                {new Date(
-                                  Number(v.entryTime / BigInt(1_000_000)),
-                                ).toLocaleTimeString("tr-TR", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </td>
-                              <td className="py-2 pr-3 text-muted-foreground hidden md:table-cell">
-                                {typeof v.visitingPerson === "string"
-                                  ? v.visitingPerson
-                                  : ""}
-                              </td>
-                              <td className="py-2 text-muted-foreground hidden md:table-cell">
-                                {typeof v.phone === "string" ? v.phone : ""}
-                              </td>
-                            </tr>
-                          ))}
+                          {activeVisitors.map((v, i) => {
+                            const evacComps = (() => {
+                              try {
+                                const r = localStorage.getItem(
+                                  `companions_${v.visitorId}`,
+                                );
+                                return r
+                                  ? (JSON.parse(r) as {
+                                      name: string;
+                                      tcId?: string;
+                                    }[])
+                                  : [];
+                              } catch {
+                                return [] as { name: string; tcId?: string }[];
+                              }
+                            })();
+                            return (
+                              <>
+                                <tr
+                                  key={v.visitorId}
+                                  className="border-b border-border/50 last:border-0"
+                                >
+                                  <td className="py-2 pr-3 text-muted-foreground font-medium">
+                                    {i + 1}
+                                  </td>
+                                  <td className="py-2 pr-3 font-medium">
+                                    {v.name} {v.surname}
+                                  </td>
+                                  <td className="py-2 pr-3 text-muted-foreground hidden sm:table-cell">
+                                    {v.tcId}
+                                  </td>
+                                  <td className="py-2 pr-3 text-muted-foreground">
+                                    {new Date(
+                                      Number(v.entryTime / BigInt(1_000_000)),
+                                    ).toLocaleTimeString("tr-TR", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </td>
+                                  <td className="py-2 pr-3 text-muted-foreground hidden md:table-cell">
+                                    {typeof v.visitingPerson === "string"
+                                      ? v.visitingPerson
+                                      : ""}
+                                  </td>
+                                  <td className="py-2 text-muted-foreground hidden md:table-cell">
+                                    {typeof v.phone === "string" ? v.phone : ""}
+                                  </td>
+                                </tr>
+                                {evacComps.map((c, ci) => (
+                                  <tr
+                                    key={`${v.visitorId}_c${ci}`}
+                                    className="border-b border-border/30"
+                                  >
+                                    <td className="py-1 pr-3 text-muted-foreground text-[10px]">
+                                      {i + 1}.{ci + 1}
+                                    </td>
+                                    <td className="py-1 pr-3 text-xs text-muted-foreground italic">
+                                      {c.name}{" "}
+                                      <span className="text-[10px] opacity-60">
+                                        (refakatçi)
+                                      </span>
+                                    </td>
+                                    <td className="py-1 pr-3 text-xs text-muted-foreground hidden sm:table-cell font-mono">
+                                      {c.tcId || "—"}
+                                    </td>
+                                    <td className="py-1 pr-3 text-xs text-muted-foreground">
+                                      —
+                                    </td>
+                                    <td className="py-1 pr-3 hidden md:table-cell" />
+                                    <td className="py-1 hidden md:table-cell" />
+                                  </tr>
+                                ))}
+                              </>
+                            );
+                          })}
                         </tbody>
                       </table>
                     )}
@@ -1310,7 +1585,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             {!securityLoading && activeVisitors.length > 0 && (
               <div
                 data-ocid="security.table"
-                className="bg-white border border-border rounded-2xl overflow-hidden"
+                className="bg-card/80 border border-border/60 rounded-2xl overflow-hidden backdrop-blur-sm"
               >
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -1339,11 +1614,96 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                           className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
                         >
                           <td className="px-4 py-3">
-                            <div className="font-medium text-foreground text-sm">
+                            <div className="font-medium text-foreground text-sm flex items-center gap-1.5 flex-wrap">
                               {v.name} {v.surname}
+                              {(() => {
+                                const comps = (() => {
+                                  try {
+                                    const r = localStorage.getItem(
+                                      `companions_${v.visitorId}`,
+                                    );
+                                    return r ? JSON.parse(r) : [];
+                                  } catch {
+                                    return [];
+                                  }
+                                })();
+                                return comps.length > 0 ? (
+                                  <span
+                                    className="bg-blue-100 text-blue-700 text-[9px] font-bold px-1.5 py-0.5 rounded-full border border-blue-200"
+                                    title={comps
+                                      .map((c: { name: string }) => c.name)
+                                      .join(", ")}
+                                  >
+                                    +{comps.length}
+                                  </span>
+                                ) : null;
+                              })()}
+                              {(() => {
+                                const tag = localStorage.getItem(
+                                  `visitorTag_${v.visitorId}`,
+                                );
+                                if (!tag) return null;
+                                const tagColors: Record<string, string> = {
+                                  VIP: "bg-amber-500/20 text-amber-400 border-amber-500/40",
+                                  Dikkat:
+                                    "bg-orange-500/20 text-orange-400 border-orange-500/40",
+                                  Kısıtlı:
+                                    "bg-red-500/20 text-red-400 border-red-500/40",
+                                };
+                                return (
+                                  <span
+                                    className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold border ${tagColors[tag] || "bg-muted/60 text-foreground/80 border-border"}`}
+                                  >
+                                    {tag}
+                                  </span>
+                                );
+                              })()}
                             </div>
-                            <div className="text-xs text-muted-foreground mt-0.5">
+                            <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
                               {parseVisitorTypeBadge(v.visitPurpose)}
+                              {(() => {
+                                const status = localStorage.getItem(
+                                  `hostApproval_${v.visitorId}`,
+                                );
+                                if (!status || status === "none") return null;
+                                const statusConfig: Record<
+                                  string,
+                                  { label: string; cls: string }
+                                > = {
+                                  pending: {
+                                    label: "⏳ Onay Bekliyor",
+                                    cls: "text-amber-600 bg-amber-50 border-amber-200",
+                                  },
+                                  approved: {
+                                    label: "✓ Onaylandı",
+                                    cls: "text-emerald-700 bg-emerald-50 border-primary/30",
+                                  },
+                                  rejected: {
+                                    label: "✗ Reddedildi",
+                                    cls: "text-red-700 bg-red-50 border-red-200",
+                                  },
+                                };
+                                const cfg = statusConfig[status];
+                                if (!cfg) return null;
+                                return (
+                                  <span
+                                    className={`inline-flex px-1.5 py-0.5 rounded border text-[10px] font-medium ${cfg.cls}`}
+                                  >
+                                    {cfg.label}
+                                  </span>
+                                );
+                              })()}
+                              {(() => {
+                                const zone = localStorage.getItem(
+                                  `visitorZone_${v.visitorId}`,
+                                );
+                                if (!zone) return null;
+                                return (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-medium bg-blue-50 text-blue-700 border-blue-200">
+                                    <MapPin className="w-2.5 h-2.5" /> {zone}
+                                  </span>
+                                );
+                              })()}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-xs text-muted-foreground font-mono hidden sm:table-cell">
@@ -1361,27 +1721,90 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                                 minute: "2-digit",
                               })}
                             </div>
-                            <div className="text-xs text-emerald-600 font-medium mt-0.5">
+                            <div className="text-xs text-emerald-400 font-medium mt-0.5">
                               {elapsedTime(v.entryTime)}
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              data-ocid={`security.checkout_button.${i + 1}`}
-                              onClick={() =>
-                                handleSecurityCheckout(v.visitorId)
-                              }
-                              disabled={checkingOutId === v.visitorId}
-                              className="flex items-center gap-1 text-xs font-medium text-destructive hover:bg-destructive/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              {checkingOutId === v.visitorId ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <LogOut className="w-3.5 h-3.5" />
+                            <div className="flex items-center gap-1.5">
+                              {(role === "owner" || role === "authorized") && (
+                                <div className="relative">
+                                  <select
+                                    data-ocid={`security.tag.select.${i + 1}`}
+                                    value={
+                                      localStorage.getItem(
+                                        `visitorTag_${v.visitorId}`,
+                                      ) || ""
+                                    }
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (val) {
+                                        localStorage.setItem(
+                                          `visitorTag_${v.visitorId}`,
+                                          val,
+                                        );
+                                      } else {
+                                        localStorage.removeItem(
+                                          `visitorTag_${v.visitorId}`,
+                                        );
+                                      }
+                                      // Force re-render
+                                      setActiveVisitors((prev) => [...prev]);
+                                    }}
+                                    className="text-xs border border-border rounded-lg px-2 py-1 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30 cursor-pointer"
+                                  >
+                                    <option value="">Etiket</option>
+                                    <option value="VIP">⭐ VIP</option>
+                                    <option value="Dikkat">⚠️ Dikkat</option>
+                                    <option value="Kısıtlı">🚫 Kısıtlı</option>
+                                  </select>
+                                </div>
                               )}
-                              Çıkış
-                            </button>
+                              <button
+                                type="button"
+                                data-ocid={`security.asset.open_modal_button.${i + 1}`}
+                                onClick={() => {
+                                  setAssetVisitorId(v.visitorId);
+                                  setAssetVisitorName(`${v.name} ${v.surname}`);
+                                  setShowAssetModal(true);
+                                }}
+                                title="Zimmet/Teslim Takibi"
+                                className={`flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg transition-colors ${
+                                  hasUnreturnedAssets(v.visitorId)
+                                    ? "text-orange-700 bg-orange-50 hover:bg-orange-100"
+                                    : "text-muted-foreground hover:bg-muted"
+                                }`}
+                              >
+                                <Package className="w-3.5 h-3.5" />
+                                {(() => {
+                                  const assets = loadAssets(v.visitorId);
+                                  const unreturned = assets.filter(
+                                    (a) => a.status === "given",
+                                  ).length;
+                                  return unreturned > 0 ? (
+                                    <span className="bg-orange-600 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                                      {unreturned}
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </button>
+                              <button
+                                type="button"
+                                data-ocid={`security.checkout_button.${i + 1}`}
+                                onClick={() =>
+                                  handleSecurityCheckout(v.visitorId)
+                                }
+                                disabled={checkingOutId === v.visitorId}
+                                className="flex items-center gap-1 text-xs font-medium text-destructive hover:bg-destructive/10 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                              >
+                                {checkingOutId === v.visitorId ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <LogOut className="w-3.5 h-3.5" />
+                                )}
+                                Çıkış
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1450,7 +1873,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             {!invitesLoading && invites.length > 0 && (
               <div
                 data-ocid="davetler.table"
-                className="bg-white border border-border rounded-2xl overflow-hidden"
+                className="bg-card/80 border border-border/60 rounded-2xl overflow-hidden backdrop-blur-sm"
               >
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -1484,6 +1907,22 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                                 {inv.visitorName} {inv.visitorSurname}
                               </div>
                             )}
+                            {(() => {
+                              const appt = localStorage.getItem(
+                                `appt_${inv.inviteCode}`,
+                              );
+                              if (!appt) return null;
+                              const { date, time } = JSON.parse(appt) as {
+                                date: string;
+                                time: string;
+                              };
+                              return (
+                                <div className="text-xs text-primary mt-0.5 flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {date} {time}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3 text-xs text-muted-foreground hidden sm:table-cell">
                             {inv.visitPurpose.replace(/^\[.*?\]\s*/, "")}
@@ -1518,7 +1957,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                                   onClick={() =>
                                     openFinalizeModal(inv.inviteCode)
                                   }
-                                  className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg transition-colors"
+                                  className="flex items-center gap-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 border border-primary/30 px-2.5 py-1.5 rounded-lg transition-colors"
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                   Tamamla
@@ -1551,7 +1990,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             {/* Bulk CSV Upload Section */}
             <div
               data-ocid="csv_upload.panel"
-              className="mt-4 bg-white border border-border rounded-2xl p-5"
+              className="mt-4 bg-card/80 border border-border/60 rounded-2xl p-5"
             >
               <div className="flex items-center gap-2 mb-3">
                 <Upload className="w-4 h-4 text-blue-500" />
@@ -1600,7 +2039,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                   className="w-full bg-muted rounded-full h-1.5 mb-2"
                 >
                   <div
-                    className="bg-blue-500 h-1.5 rounded-full transition-all"
+                    className="bg-primary h-1.5 rounded-full transition-all"
                     style={{
                       width:
                         csvTotal > 0
@@ -1613,7 +2052,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
               {csvResult && (
                 <div
                   data-ocid="csv_upload.success_state"
-                  className={`text-xs font-medium px-3 py-2 rounded-xl ${csvResult.failed === 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-800 border border-amber-200"}`}
+                  className={`text-xs font-medium px-3 py-2 rounded-xl ${csvResult.failed === 0 ? "bg-emerald-50 text-emerald-700 border border-primary/30" : "bg-amber-50 text-amber-800 border border-amber-200"}`}
                 >
                   ✓ {csvResult.success} başarılı
                   {csvResult.failed > 0 ? `, ${csvResult.failed} hatalı` : ""}
@@ -1692,7 +2131,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                         },
                         VISITOR_CHECKOUT: {
                           label: "Çıkış Yapıldı",
-                          cls: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+                          cls: "bg-emerald-50 text-emerald-700 border border-primary/30",
                         },
                       };
                       const action = actionMap[log.action] || {
@@ -1711,7 +2150,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                       return (
                         <tr
                           key={log.logId || i}
-                          className="bg-white hover:bg-muted/30 transition-colors"
+                          className="bg-card/50 hover:bg-primary/5 transition-colors"
                         >
                           <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">
                             {ts}
@@ -1806,7 +2245,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                 {topPersons.length > 0 && (
                   <div
                     data-ocid="top_visited.panel"
-                    className="bg-white border border-border rounded-2xl p-5"
+                    className="bg-card/80 border border-border/60 rounded-2xl p-5"
                   >
                     <div className="flex items-center gap-2 mb-4">
                       <Medal className="w-4 h-4 text-amber-500" />
@@ -1818,11 +2257,11 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                       {topPersons.map(([name, count], i) => {
                         const medalColor =
                           i === 0
-                            ? "bg-amber-100 text-amber-700"
+                            ? "bg-amber-500/20 text-amber-400"
                             : i === 1
-                              ? "bg-slate-100 text-slate-600"
+                              ? "bg-muted/60 text-muted-foreground"
                               : i === 2
-                                ? "bg-orange-100 text-orange-700"
+                                ? "bg-amber-500/15 text-amber-400"
                                 : "bg-muted text-muted-foreground";
                         return (
                           <div
@@ -1851,7 +2290,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                 {frequentVisitors.length > 0 && (
                   <div
                     data-ocid="employee_dash.frequent_visitors.section"
-                    className="bg-white border border-border rounded-2xl p-5"
+                    className="bg-card/80 border border-border/60 rounded-2xl p-5"
                   >
                     <div className="flex items-center gap-2 mb-4">
                       <Repeat2 className="w-4 h-4 text-violet-500" />
@@ -1866,13 +2305,13 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                           data-ocid={`employee_dash.frequent_visitor.item.${i + 1}`}
                           className="flex items-center gap-3"
                         >
-                          <span className="w-6 h-6 rounded-full bg-violet-50 flex items-center justify-center text-xs font-bold text-violet-600">
+                          <span className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary">
                             {i + 1}
                           </span>
                           <span className="flex-1 text-sm text-foreground truncate">
                             {item.name} {item.surname}
                           </span>
-                          <span className="text-sm font-semibold text-violet-600">
+                          <span className="text-sm font-semibold text-primary">
                             {item.count} ziyaret
                           </span>
                         </div>
@@ -1883,7 +2322,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                 {/* Date Range PDF Report */}
                 <div
                   data-ocid="date_report.panel"
-                  className="bg-white border border-border rounded-2xl p-5"
+                  className="bg-card/80 border border-border/60 rounded-2xl p-5"
                 >
                   <div className="flex items-center gap-2 mb-4">
                     <Calendar className="w-4 h-4 text-blue-500" />
@@ -1995,13 +2434,13 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
 
             {/* Summary badges */}
             <div className="flex gap-3">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/15 border border-amber-500/40 rounded-xl">
                 <Users className="w-4 h-4 text-amber-600" />
                 <span className="text-sm font-medium text-amber-800">
                   Bekleyen: {queue.filter((q) => q.status === "waiting").length}
                 </span>
               </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-primary/30 rounded-xl">
                 <Check className="w-4 h-4 text-emerald-600" />
                 <span className="text-sm font-medium text-emerald-800">
                   Çağrılan: {queue.filter((q) => q.status === "called").length}
@@ -2010,21 +2449,21 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
             </div>
 
             {/* Add to queue form */}
-            <div className="bg-white border border-border rounded-2xl p-4 space-y-3">
+            <div className="bg-card/80 border border-border/60 rounded-2xl p-4 space-y-3">
               <div className="flex gap-2 flex-wrap">
                 <input
                   data-ocid="queue.name_input"
                   value={queueName}
                   onChange={(e) => setQueueName(e.target.value)}
                   placeholder="Ziyaretçi adı (zorunlu)"
-                  className="flex-1 min-w-32 border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white"
+                  className="flex-1 min-w-32 border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-secondary/50"
                 />
                 <input
                   data-ocid="queue.purpose_input"
                   value={queuePurpose}
                   onChange={(e) => setQueuePurpose(e.target.value)}
                   placeholder="Ziyaret amacı (isteğe bağlı)"
-                  className="flex-1 min-w-32 border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white"
+                  className="flex-1 min-w-32 border border-input rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-secondary/50"
                 />
                 <button
                   type="button"
@@ -2073,8 +2512,8 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     key={entry.id}
                     className={`flex items-center gap-3 p-3 border rounded-xl transition-colors ${
                       entry.status === "called"
-                        ? "bg-emerald-50 border-emerald-200"
-                        : "bg-white border-border"
+                        ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                        : "bg-card/60 border-border/60"
                     }`}
                   >
                     <div
@@ -2100,7 +2539,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                       className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         entry.status === "called"
                           ? "bg-emerald-100 text-emerald-700"
-                          : "bg-amber-100 text-amber-700"
+                          : "bg-amber-500/20 text-amber-400"
                       }`}
                     >
                       {entry.status === "called" ? "Çağrıldı" : "Bekliyor"}
@@ -2151,7 +2590,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
           data-ocid="feedback.dialog"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
         >
-          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+          <div className="glass-panel rounded-2xl shadow-elevated p-6 max-w-sm w-full mx-4 space-y-4">
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
                 <Star className="w-4 h-4 text-amber-500" />
@@ -2176,7 +2615,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     type="button"
                     data-ocid={`feedback.star.${star}`}
                     onClick={() => setFeedbackRating(star)}
-                    className={`text-2xl transition-transform hover:scale-110 ${star <= feedbackRating ? "text-amber-400" : "text-gray-200"}`}
+                    className={`text-2xl transition-transform hover:scale-110 ${star <= feedbackRating ? "text-amber-400" : "text-muted/50"}`}
                   >
                     ★
                   </button>
@@ -2198,7 +2637,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                 onChange={(e) => setFeedbackNote(e.target.value)}
                 rows={2}
                 placeholder="Kısa bir not..."
-                className="w-full border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 bg-white resize-none"
+                className="w-full border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/30 bg-secondary/50 resize-none"
               />
             </div>
             <div className="flex gap-2">
@@ -2224,16 +2663,178 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
         </div>
       )}
 
+      {/* Approvals Tab */}
+      {tab === "approvals" && (
+        <div className="p-4 sm:p-6 max-w-2xl space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <ThumbsUp className="w-5 h-5 text-emerald-600" />
+            <h2 className="text-base font-semibold text-foreground">
+              Bekleyen Onaylar
+            </h2>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Size gelen ziyaretçiler için giriş onayı veya reddi yapın.
+          </p>
+          {pendingApprovals.length === 0 ? (
+            <div
+              data-ocid="approvals.empty_state"
+              className="text-center py-12 text-muted-foreground"
+            >
+              <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3">
+                <ThumbsUp className="w-5 h-5 opacity-40" />
+              </div>
+              <p className="text-sm font-medium">Bekleyen onay yok</p>
+            </div>
+          ) : (
+            <div data-ocid="approvals.list" className="space-y-3">
+              {pendingApprovals.map((v, i) => (
+                <div
+                  key={v.visitorId}
+                  data-ocid={`approvals.item.${i + 1}`}
+                  className="bg-card/80 border border-border/60 rounded-2xl p-4 flex items-start justify-between gap-4"
+                >
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm text-foreground">
+                      {v.name} {v.surname}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {v.visitPurpose} •{" "}
+                      {new Date(
+                        Number(v.entryTime / BigInt(1_000_000)),
+                      ).toLocaleTimeString("tr-TR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                    <span className="inline-flex items-center mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 border border-amber-200">
+                      Onay Bekliyor
+                    </span>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button
+                      type="button"
+                      data-ocid={`approvals.confirm_button.${i + 1}`}
+                      onClick={() => {
+                        localStorage.setItem(
+                          `hostApproval_${v.visitorId}`,
+                          "approved",
+                        );
+                        setPendingApprovals((prev) =>
+                          prev.filter((a) => a.visitorId !== v.visitorId),
+                        );
+                        toast.success(`${v.name} ${v.surname} kabul edildi`);
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors"
+                    >
+                      <ThumbsUp className="w-3 h-3" />
+                      Kabul Et
+                    </button>
+                    <button
+                      type="button"
+                      data-ocid={`approvals.cancel_button.${i + 1}`}
+                      onClick={() => {
+                        localStorage.setItem(
+                          `hostApproval_${v.visitorId}`,
+                          "rejected",
+                        );
+                        setPendingApprovals((prev) =>
+                          prev.filter((a) => a.visitorId !== v.visitorId),
+                        );
+                        toast.error(`${v.name} ${v.surname} reddedildi`);
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-100 text-red-700 border border-red-200 text-xs font-semibold hover:bg-red-200 transition-colors"
+                    >
+                      <ThumbsDown className="w-3 h-3" />
+                      Reddet
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Duyurular Tab */}
+      {tab === "duyuru" && company && (
+        <div className="p-4 sm:p-6 max-w-2xl space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Bell className="w-5 h-5 text-amber-600" />
+            <h2 className="text-base font-semibold text-foreground">
+              Duyurular
+            </h2>
+          </div>
+          {(() => {
+            const ann = localStorage.getItem(
+              `announcements_${company.companyId}`,
+            );
+            if (!ann)
+              return (
+                <div
+                  data-ocid="duyuru.empty_state"
+                  className="text-center py-12 text-sm text-muted-foreground"
+                >
+                  Henüz duyuru yok
+                </div>
+              );
+            const list = JSON.parse(ann) as {
+              id: string;
+              text: string;
+              createdAt: string;
+              authorName: string;
+            }[];
+            if (!list.length)
+              return (
+                <div
+                  data-ocid="duyuru.empty_state"
+                  className="text-center py-12 text-sm text-muted-foreground"
+                >
+                  Henüz duyuru yok
+                </div>
+              );
+            return (
+              <div className="space-y-3">
+                {list.map((item, i) => (
+                  <div
+                    key={item.id}
+                    data-ocid={`duyuru.item.${i + 1}`}
+                    className="bg-card/80 border border-border/60 rounded-2xl p-4 space-y-2"
+                  >
+                    <p className="text-sm text-foreground whitespace-pre-wrap">
+                      {item.text}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Bell className="w-3 h-3" />
+                      <span>{item.authorName}</span>
+                      <span>·</span>
+                      <span>
+                        {new Date(item.createdAt).toLocaleDateString("tr-TR", {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Create Invite Modal */}
       {showCreateInvite && (
         <div
           data-ocid="davetler.create.dialog"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
         >
-          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+          <div className="glass-panel rounded-2xl shadow-elevated p-6 max-w-sm w-full mx-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center">
                   <Link2 className="w-4 h-4 text-emerald-600" />
                 </div>
                 <h3 className="font-display font-semibold text-foreground text-sm">
@@ -2268,7 +2869,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     value={createVisitingPerson}
                     onChange={(e) => setCreateVisitingPerson(e.target.value)}
                     placeholder="Personel adı"
-                    className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 bg-white"
+                    className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-secondary/50"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -2283,7 +2884,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     data-ocid="davetler.visit_purpose.select"
                     value={createVisitPurpose}
                     onChange={(e) => setCreateVisitPurpose(e.target.value)}
-                    className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 bg-white"
+                    className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-secondary/50"
                   >
                     {VISIT_PURPOSES.map((p) => (
                       <option key={p} value={p}>
@@ -2291,6 +2892,59 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label
+                      htmlFor="create-appt-date"
+                      className="block text-sm font-medium text-foreground"
+                    >
+                      Randevu Tarihi
+                    </label>
+                    <input
+                      id="create-appt-date"
+                      type="date"
+                      data-ocid="davetler.appointment_date.input"
+                      value={createAppointmentDate}
+                      onChange={(e) => setCreateAppointmentDate(e.target.value)}
+                      className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-secondary/50"
+                    />
+                  </div>
+                  {createAppointmentDate && (
+                    <div className="space-y-1.5">
+                      <label
+                        htmlFor="create-appt-time"
+                        className="block text-sm font-medium text-foreground"
+                      >
+                        Saat
+                      </label>
+                      <select
+                        id="create-appt-time"
+                        data-ocid="davetler.appointment_time.select"
+                        value={createAppointmentTime}
+                        onChange={(e) =>
+                          setCreateAppointmentTime(e.target.value)
+                        }
+                        className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-secondary/50"
+                      >
+                        <option value="">Seçin</option>
+                        {Array.from({ length: 27 }, (_, i) => {
+                          const totalMinutes = 7 * 60 + i * 30;
+                          const h = Math.floor(totalMinutes / 60)
+                            .toString()
+                            .padStart(2, "0");
+                          const m = (totalMinutes % 60)
+                            .toString()
+                            .padStart(2, "0");
+                          return `${h}:${m}`;
+                        }).map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2 pt-1">
                   <button
@@ -2327,7 +2981,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     <input
                       readOnly
                       value={inviteLink(createdCode)}
-                      className="flex-1 text-xs font-mono bg-white border border-emerald-200 rounded-lg px-2 py-2 text-foreground min-w-0"
+                      className="flex-1 text-xs font-mono bg-secondary/50 border border-primary/30 rounded-lg px-2 py-2 text-foreground min-w-0"
                     />
                     <button
                       type="button"
@@ -2366,10 +3020,10 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
           data-ocid="davetler.finalize.dialog"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
         >
-          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+          <div className="glass-panel rounded-2xl shadow-elevated p-6 max-w-sm w-full mx-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 </div>
                 <h3 className="font-display font-semibold text-foreground text-sm">
@@ -2453,6 +3107,20 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
         </div>
       )}
 
+      {/* Asset Manager Modal */}
+      {showAssetModal && assetVisitorId && (
+        <AssetManager
+          visitorId={assetVisitorId}
+          visitorName={assetVisitorName}
+          onClose={() => {
+            setShowAssetModal(false);
+            setAssetVisitorId(null);
+            // Refresh active visitors to update badges
+            if (company) loadActiveVisitors(company.companyId);
+          }}
+        />
+      )}
+
       {/* PIN Change Modal */}
       {kioskMode && employee && company && (
         <KioskMode
@@ -2469,15 +3137,70 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
         />
       )}
 
+      {showJoinModal && (
+        <div
+          data-ocid="employee_dash.join_modal.dialog"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        >
+          <div className="glass-panel rounded-2xl shadow-elevated p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-foreground">
+                Davet Koduyla u015eirkete Katu0131l
+              </h3>
+              <button
+                type="button"
+                data-ocid="employee_dash.join_modal.close_button"
+                onClick={() => setShowJoinModal(false)}
+                className="p-1 rounded-lg hover:bg-muted text-muted-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              u015eirketinizden aldu0131u011fu0131nu0131z 10 karakterlik davet
+              kodunu girin.
+            </p>
+            <form onSubmit={handleJoinWithInviteCode} className="space-y-3">
+              <input
+                data-ocid="employee_dash.join_code.input"
+                type="text"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+                placeholder="Davet kodu"
+                maxLength={10}
+                className="w-full border border-border rounded-xl px-3 py-2.5 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  data-ocid="employee_dash.join_modal.cancel_button"
+                  onClick={() => setShowJoinModal(false)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium border border-border hover:bg-muted transition-colors"
+                >
+                  u0130ptal
+                </button>
+                <button
+                  type="submit"
+                  data-ocid="employee_dash.join_modal.submit_button"
+                  disabled={joining}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {joining ? "Katu0131lu0131yor..." : "Katu0131l"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       {showPinModal && (
         <div
           data-ocid="employee_dash.pin_modal.dialog"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
         >
-          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+          <div className="glass-panel rounded-2xl shadow-elevated p-6 max-w-sm w-full mx-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center">
                   <KeyRound className="w-4 h-4 text-emerald-600" />
                 </div>
                 <h3 className="font-display font-semibold text-foreground text-sm">
@@ -2521,7 +3244,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     setNewPin(e.target.value.replace(/\D/g, "").slice(0, 6))
                   }
                   placeholder="••••"
-                  className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 bg-white"
+                  className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-secondary/50"
                 />
               </div>
               <div className="space-y-1.5">
@@ -2543,7 +3266,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                     )
                   }
                   placeholder="••••"
-                  className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 bg-white"
+                  className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-secondary/50"
                 />
               </div>
               {pinError && (
@@ -2605,7 +3328,7 @@ function InviteStatusBadge({ status }: { status: PreRegistration["status"] }) {
     );
   if (status === "finalized")
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-primary/30">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
         Tamamlandı
       </span>
@@ -2668,24 +3391,24 @@ function StatCard({
 }) {
   const colorMap = {
     primary: {
-      card: "bg-primary/5 border-primary/20",
-      icon: "bg-primary/10 text-primary",
+      card: "stat-card-teal",
+      icon: "bg-primary/20 text-primary",
       value: "text-primary",
     },
     emerald: {
-      card: "bg-emerald-50 border-emerald-200",
-      icon: "bg-emerald-100 text-emerald-700",
-      value: "text-emerald-800",
+      card: "stat-card-emerald",
+      icon: "bg-emerald-500/20 text-emerald-400",
+      value: "text-emerald-400",
     },
     blue: {
-      card: "bg-blue-50 border-blue-200",
-      icon: "bg-blue-100 text-blue-700",
-      value: "text-blue-800",
+      card: "stat-card-blue",
+      icon: "bg-violet-500/20 text-violet-400",
+      value: "text-violet-400",
     },
   };
   const c = colorMap[color];
   return (
-    <div className={`rounded-2xl border p-5 ${c.card}`}>
+    <div className={`rounded-2xl p-5 ${c.card}`}>
       <div
         className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${c.icon}`}
       >

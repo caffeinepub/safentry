@@ -255,6 +255,9 @@ export interface backendInterface {
     updateVisitorSignature(visitorId: string, companyId: string, signatureData: string): Promise<void>;
     verifyDocument(documentCode: string): Promise<VerifyDocumentResult | null>;
     verifyEmployeePin(employeeId: string, pin: string): Promise<boolean>;
+    generatePersonnelInviteCode(loginCode: string, role: EmployeeRole): Promise<string>;
+    usePersonnelInviteCode(code: string): Promise<void>;
+    getPersonnelInviteCodes(loginCode: string): Promise<Array<{ code: string; companyId: string; role: EmployeeRole; createdAt: bigint; usedBy: [] | [string] }>>;
 }
 import type { Company as _Company, CompanyStats as _CompanyStats, Employee as _Employee, EmployeeRole as _EmployeeRole, PreRegistration as _PreRegistration, PreRegistrationStatus as _PreRegistrationStatus, Time as _Time, UserProfile as _UserProfile, UserRole as _UserRole, VerifyDocumentResult as _VerifyDocumentResult, Visitor as _Visitor } from "./declarations/backend.did.d.ts";
 export class Backend implements backendInterface {
@@ -971,6 +974,37 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.verifyDocument(arg0);
             return from_candid_opt_n35(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async generatePersonnelInviteCode(arg0: string, arg1: EmployeeRole): Promise<string> {
+        if (this.processError) {
+            try {
+                const result = await (this.actor as any).generatePersonnelInviteCode(arg0, arg1);
+                return result as string;
+            } catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else {
+            const result = await (this.actor as any).generatePersonnelInviteCode(arg0, arg1);
+            return result as string;
+        }
+    }
+    async usePersonnelInviteCode(arg0: string): Promise<void> {
+        if (this.processError) {
+            try {
+                await (this.actor as any).usePersonnelInviteCode(arg0);
+            } catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else {
+            await (this.actor as any).usePersonnelInviteCode(arg0);
+        }
+    }
+    async getPersonnelInviteCodes(arg0: string): Promise<Array<{ code: string; companyId: string; role: EmployeeRole; createdAt: bigint; usedBy: [] | [string] }>> {
+        if (this.processError) {
+            try {
+                const result = await (this.actor as any).getPersonnelInviteCodes(arg0);
+                return result as any;
+            } catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else {
+            const result = await (this.actor as any).getPersonnelInviteCodes(arg0);
+            return result as any;
         }
     }
     async verifyEmployeePin(arg0: string, arg1: string): Promise<boolean> {

@@ -1,4 +1,14 @@
-import { AlertTriangle, Trash2, UserPlus, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Clipboard,
+  Clock,
+  Key,
+  KeyRound,
+  Trash2,
+  UserPlus,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmployeeRole } from "../backend";
@@ -14,16 +24,30 @@ interface EmployeeEntry {
   };
 }
 
+interface InviteCode {
+  code: string;
+  companyId: string;
+  role: EmployeeRole;
+  createdAt: bigint;
+  usedBy: [] | [string];
+}
+
 interface Props {
   companyId: string;
   loginCode?: string;
   currentEmployeeId?: string;
+  isCompanyOwner?: boolean;
+  onResetPin?: (empId: string, name: string) => void;
+  onViewHistory?: (empId: string, name: string) => void;
 }
 
 export default function EmployeeManager({
   companyId,
   loginCode,
   currentEmployeeId,
+  isCompanyOwner = false,
+  onResetPin,
+  onViewHistory,
 }: Props) {
   const [list, setList] = useState<EmployeeEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +56,16 @@ export default function EmployeeManager({
   const [adding, setAdding] = useState(false);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
+
+  // Invite code state
+  const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
+  const [inviteRole, setInviteRole] = useState<EmployeeRole>(
+    EmployeeRole.registrar,
+  );
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [newCode, setNewCode] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -44,9 +78,18 @@ export default function EmployeeManager({
       .finally(() => setLoading(false));
   }, [loginCode, companyId]);
 
+  const loadInviteCodes = useCallback(() => {
+    if (!loginCode) return;
+    backend
+      .getPersonnelInviteCodes(loginCode)
+      .then((r) => setInviteCodes(r as InviteCode[]))
+      .catch(() => {});
+  }, [loginCode]);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadInviteCodes();
+  }, [load, loadInviteCodes]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,19 +146,49 @@ export default function EmployeeManager({
     }
   };
 
+  const handleGenerateInviteCode = async () => {
+    if (!loginCode) return;
+    setGeneratingCode(true);
+    try {
+      const code = await backend.generatePersonnelInviteCode(
+        loginCode,
+        inviteRole,
+      );
+      setNewCode(code as string);
+      loadInviteCodes();
+    } catch {
+      toast.error("Davet kodu oluşturulamadı");
+    } finally {
+      setGeneratingCode(false);
+    }
+  };
+
+  const copyCode = (code: string) => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    });
+  };
+
+  const roleLabel = (role: EmployeeRole) => {
+    if (role === EmployeeRole.owner) return "Sahip";
+    if (role === EmployeeRole.authorized) return "Yetkili";
+    return "Kayıt Personeli";
+  };
+
   const confirmEntry = confirmRemoveId
     ? list.find((e) => e.employee.employeeId === confirmRemoveId)
     : null;
 
   return (
-    <div className="p-4 max-w-xl">
+    <div className="p-4 max-w-xl space-y-4">
       {loginCode && (
         <form
           onSubmit={handleAdd}
-          className="bg-white border rounded-xl p-4 mb-4 space-y-3"
+          className="bg-white border rounded-xl p-4 space-y-3"
         >
           <div className="text-sm font-medium text-slate-700">
-            Personel Ekle
+            Personel Ekle (Kod ile)
           </div>
           <div className="flex gap-2">
             <input
@@ -147,6 +220,124 @@ export default function EmployeeManager({
             </button>
           </div>
         </form>
+      )}
+
+      {/* Invite Code Section */}
+      {loginCode && (
+        <div className="bg-white border rounded-xl p-4 space-y-3">
+          <button
+            type="button"
+            data-ocid="emp_manager.invite_code.toggle"
+            onClick={() => setShowInvite(!showInvite)}
+            className="flex items-center gap-2 text-sm font-medium text-slate-700 w-full"
+          >
+            <Key className="w-4 h-4 text-cyan-600" />
+            Davet Kodu ile Ekle
+            <span className="ml-auto text-xs text-slate-400">
+              {showInvite ? "▲" : "▼"}
+            </span>
+          </button>
+
+          {showInvite && (
+            <div className="space-y-3 pt-2 border-t border-slate-100">
+              <p className="text-xs text-slate-500">
+                Personele gönderebileceğiniz tek kullanımlık bir davet kodu
+                oluşturun. Personel bu kodu kendi panelinden girerek şirketinize
+                katılır.
+              </p>
+              <div className="flex gap-2">
+                <select
+                  data-ocid="emp_manager.invite_role.select"
+                  value={inviteRole}
+                  onChange={(e) =>
+                    setInviteRole(e.target.value as EmployeeRole)
+                  }
+                  className="flex-1 border border-slate-300 rounded-lg px-2 py-2 text-sm focus:outline-none"
+                >
+                  <option value={EmployeeRole.registrar}>
+                    Kayıt Personeli
+                  </option>
+                  <option value={EmployeeRole.authorized}>Yetkili</option>
+                  <option value={EmployeeRole.owner}>Sahip</option>
+                </select>
+                <button
+                  type="button"
+                  data-ocid="emp_manager.generate_invite.button"
+                  onClick={handleGenerateInviteCode}
+                  disabled={generatingCode}
+                  className="bg-cyan-700 text-white px-4 py-2 rounded-lg hover:bg-cyan-800 transition-colors disabled:opacity-50 text-sm font-medium whitespace-nowrap"
+                >
+                  {generatingCode ? "Oluşturuluyor..." : "Kod Oluştur"}
+                </button>
+              </div>
+
+              {newCode && (
+                <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3 space-y-2">
+                  <div className="text-xs font-medium text-cyan-800">
+                    Oluşturulan Davet Kodu:
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-white border border-cyan-200 rounded-lg px-3 py-2 font-mono text-base tracking-widest text-slate-800 select-all text-center">
+                      {newCode}
+                    </div>
+                    <button
+                      type="button"
+                      data-ocid="emp_manager.copy_invite.button"
+                      onClick={() => copyCode(newCode)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-cyan-700 text-white text-xs font-medium hover:bg-cyan-800 transition-colors"
+                    >
+                      {copiedCode ? (
+                        <Check className="w-3.5 h-3.5" />
+                      ) : (
+                        <Clipboard className="w-3.5 h-3.5" />
+                      )}
+                      {copiedCode ? "Kopyalandı" : "Kopyala"}
+                    </button>
+                  </div>
+                  <p className="text-xs text-cyan-700">
+                    Bu kodu personele iletin. Tek kullanımlıktır.
+                  </p>
+                </div>
+              )}
+
+              {inviteCodes.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-xs font-medium text-slate-500">
+                    Oluşturulan Kodlar
+                  </div>
+                  {inviteCodes
+                    .slice(-5)
+                    .reverse()
+                    .map((ic, i) => (
+                      <div
+                        key={ic.code}
+                        data-ocid={`emp_manager.invite_code.item.${i + 1}`}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${
+                          ic.usedBy.length > 0
+                            ? "bg-slate-50 text-slate-400 line-through"
+                            : "bg-green-50 text-slate-700"
+                        }`}
+                      >
+                        <span className="font-mono flex-1">{ic.code}</span>
+                        <span className="text-slate-400">
+                          {roleLabel(ic.role)}
+                        </span>
+                        <span
+                          className={
+                            ic.usedBy.length > 0
+                              ? "text-slate-400"
+                              : "text-green-600 font-medium"
+                          }
+                        >
+                          {ic.usedBy.length > 0 ? "Kullanıldı" : "Aktif"}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {loading && (
@@ -198,6 +389,38 @@ export default function EmployeeManager({
                 <option value={EmployeeRole.authorized}>Yetkili</option>
                 <option value={EmployeeRole.owner}>Sahip</option>
               </select>
+              {isCompanyOwner && onResetPin && (
+                <button
+                  type="button"
+                  data-ocid={`emp_manager.reset_pin.button.${i + 1}`}
+                  onClick={() =>
+                    onResetPin(
+                      e.employee.employeeId,
+                      `${e.employee.name} ${e.employee.surname}`,
+                    )
+                  }
+                  className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                  title="PIN Sıfırla"
+                >
+                  <KeyRound className="w-4 h-4" />
+                </button>
+              )}
+              {isCompanyOwner && onViewHistory && (
+                <button
+                  type="button"
+                  data-ocid={`emp_manager.history.button.${i + 1}`}
+                  onClick={() =>
+                    onViewHistory(
+                      e.employee.employeeId,
+                      `${e.employee.name} ${e.employee.surname}`,
+                    )
+                  }
+                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="Oturum Geçmişi"
+                >
+                  <Clock className="w-4 h-4" />
+                </button>
+              )}
               {e.employee.employeeId !== currentEmployeeId && (
                 <button
                   type="button"

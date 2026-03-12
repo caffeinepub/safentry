@@ -17,7 +17,7 @@ export default {
     extend: {
       fontFamily: {
         display: ["Bricolage Grotesque", "system-ui", "sans-serif"],
-        sans: ["General Sans", "system-ui", "sans-serif"],
+        sans: ["Plus Jakarta Sans", "General Sans", "system-ui", "sans-serif"],
         mono: ["Geist Mono", "ui-monospace", "monospace"],
       },
       colors: {
@@ -78,9 +78,11 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       boxShadow: {
-        xs: "0 1px 2px 0 rgba(0,0,0,0.05)",
-        card: "0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.04)",
-        elevated: "0 4px 12px 0 rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.06)",
+        xs: "0 1px 2px 0 rgba(0,0,0,0.25)",
+        card: "0 1px 3px 0 rgba(0,0,0,0.35), 0 1px 2px -1px rgba(0,0,0,0.25)",
+        elevated: "0 4px 24px 0 rgba(0,0,0,0.40), 0 2px 8px -2px rgba(0,0,0,0.30)",
+        glow: "0 0 20px oklch(0.72 0.18 195 / 0.25)",
+        "glow-amber": "0 0 20px oklch(0.82 0.16 80 / 0.25)",
       },
       keyframes: {
         "accordion-down": {

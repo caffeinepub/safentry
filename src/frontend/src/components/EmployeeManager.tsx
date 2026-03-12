@@ -185,9 +185,9 @@ export default function EmployeeManager({
       {loginCode && (
         <form
           onSubmit={handleAdd}
-          className="bg-white border rounded-xl p-4 space-y-3"
+          className="bg-card border rounded-xl p-4 space-y-3"
         >
-          <div className="text-sm font-medium text-slate-700">
+          <div className="text-sm font-medium text-foreground/80">
             Personel Ekle (Kod ile)
           </div>
           <div className="flex gap-2">
@@ -198,13 +198,13 @@ export default function EmployeeManager({
               onChange={(e) => setAddEmpId(e.target.value)}
               placeholder="8 haneli personel kodu"
               maxLength={8}
-              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
+              className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono"
             />
             <select
               data-ocid="emp_manager.role.select"
               value={addRole}
               onChange={(e) => setAddRole(e.target.value as EmployeeRole)}
-              className="border border-slate-300 rounded-lg px-2 py-2 text-sm focus:outline-none"
+              className="border border-border rounded-lg px-2 py-2 text-sm focus:outline-none"
             >
               <option value={EmployeeRole.registrar}>Kayıt Personeli</option>
               <option value={EmployeeRole.authorized}>Yetkili</option>
@@ -224,23 +224,23 @@ export default function EmployeeManager({
 
       {/* Invite Code Section */}
       {loginCode && (
-        <div className="bg-white border rounded-xl p-4 space-y-3">
+        <div className="bg-card border rounded-xl p-4 space-y-3">
           <button
             type="button"
             data-ocid="emp_manager.invite_code.toggle"
             onClick={() => setShowInvite(!showInvite)}
-            className="flex items-center gap-2 text-sm font-medium text-slate-700 w-full"
+            className="flex items-center gap-2 text-sm font-medium text-foreground/80 w-full"
           >
-            <Key className="w-4 h-4 text-cyan-600" />
+            <Key className="w-4 h-4 text-primary" />
             Davet Kodu ile Ekle
-            <span className="ml-auto text-xs text-slate-400">
+            <span className="ml-auto text-xs text-muted-foreground/70">
               {showInvite ? "▲" : "▼"}
             </span>
           </button>
 
           {showInvite && (
-            <div className="space-y-3 pt-2 border-t border-slate-100">
-              <p className="text-xs text-slate-500">
+            <div className="space-y-3 pt-2 border-t border-border/50">
+              <p className="text-xs text-muted-foreground">
                 Personele gönderebileceğiniz tek kullanımlık bir davet kodu
                 oluşturun. Personel bu kodu kendi panelinden girerek şirketinize
                 katılır.
@@ -252,7 +252,7 @@ export default function EmployeeManager({
                   onChange={(e) =>
                     setInviteRole(e.target.value as EmployeeRole)
                   }
-                  className="flex-1 border border-slate-300 rounded-lg px-2 py-2 text-sm focus:outline-none"
+                  className="flex-1 border border-border rounded-lg px-2 py-2 text-sm focus:outline-none"
                 >
                   <option value={EmployeeRole.registrar}>
                     Kayıt Personeli
@@ -272,12 +272,12 @@ export default function EmployeeManager({
               </div>
 
               {newCode && (
-                <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3 space-y-2">
-                  <div className="text-xs font-medium text-cyan-800">
+                <div className="bg-primary/10 border border-primary/30 rounded-xl p-3 space-y-2">
+                  <div className="text-xs font-medium text-primary">
                     Oluşturulan Davet Kodu:
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-white border border-cyan-200 rounded-lg px-3 py-2 font-mono text-base tracking-widest text-slate-800 select-all text-center">
+                    <div className="flex-1 bg-card border border-primary/30 rounded-lg px-3 py-2 font-mono text-base tracking-widest text-foreground select-all text-center">
                       {newCode}
                     </div>
                     <button
@@ -294,7 +294,7 @@ export default function EmployeeManager({
                       {copiedCode ? "Kopyalandı" : "Kopyala"}
                     </button>
                   </div>
-                  <p className="text-xs text-cyan-700">
+                  <p className="text-xs text-primary/80">
                     Bu kodu personele iletin. Tek kullanımlıktır.
                   </p>
                 </div>
@@ -302,7 +302,7 @@ export default function EmployeeManager({
 
               {inviteCodes.length > 0 && (
                 <div className="space-y-1.5">
-                  <div className="text-xs font-medium text-slate-500">
+                  <div className="text-xs font-medium text-muted-foreground">
                     Oluşturulan Kodlar
                   </div>
                   {inviteCodes
@@ -314,19 +314,19 @@ export default function EmployeeManager({
                         data-ocid={`emp_manager.invite_code.item.${i + 1}`}
                         className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${
                           ic.usedBy.length > 0
-                            ? "bg-slate-50 text-slate-400 line-through"
-                            : "bg-green-50 text-slate-700"
+                            ? "bg-muted/30 text-muted-foreground/70 line-through"
+                            : "bg-green-500/10 text-foreground/80"
                         }`}
                       >
                         <span className="font-mono flex-1">{ic.code}</span>
-                        <span className="text-slate-400">
+                        <span className="text-muted-foreground/70">
                           {roleLabel(ic.role)}
                         </span>
                         <span
                           className={
                             ic.usedBy.length > 0
-                              ? "text-slate-400"
-                              : "text-green-600 font-medium"
+                              ? "text-muted-foreground/70"
+                              : "text-green-400 font-medium"
                           }
                         >
                           {ic.usedBy.length > 0 ? "Kullanıldı" : "Aktif"}
@@ -343,7 +343,7 @@ export default function EmployeeManager({
       {loading && (
         <div
           data-ocid="emp_manager.loading_state"
-          className="text-slate-400 text-sm"
+          className="text-muted-foreground/70 text-sm"
         >
           Yükleniyor...
         </div>
@@ -352,7 +352,7 @@ export default function EmployeeManager({
       {!loading && list.length === 0 && (
         <div
           data-ocid="emp_manager.empty_state"
-          className="text-center py-8 text-slate-400 text-sm"
+          className="text-center py-8 text-muted-foreground/70 text-sm"
         >
           Henüz personel yok
         </div>
@@ -363,13 +363,13 @@ export default function EmployeeManager({
           <div
             key={e.employee.employeeId}
             data-ocid={`emp_manager.item.${i + 1}`}
-            className="bg-white border rounded-xl p-4 flex items-center justify-between gap-3"
+            className="bg-card border rounded-xl p-4 flex items-center justify-between gap-3"
           >
             <div>
-              <div className="font-medium text-slate-800 text-sm">
+              <div className="font-medium text-foreground text-sm">
                 {e.employee.name} {e.employee.surname}
               </div>
-              <div className="text-xs text-slate-400 font-mono">
+              <div className="text-xs text-muted-foreground/70 font-mono">
                 {e.employee.employeeId}
               </div>
             </div>
@@ -383,7 +383,7 @@ export default function EmployeeManager({
                     ev.target.value as EmployeeRole,
                   )
                 }
-                className="border border-slate-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                className="border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none"
               >
                 <option value={EmployeeRole.registrar}>Kayıt Personeli</option>
                 <option value={EmployeeRole.authorized}>Yetkili</option>
@@ -399,7 +399,7 @@ export default function EmployeeManager({
                       `${e.employee.name} ${e.employee.surname}`,
                     )
                   }
-                  className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                  className="p-1.5 text-muted-foreground/70 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
                   title="PIN Sıfırla"
                 >
                   <KeyRound className="w-4 h-4" />
@@ -415,7 +415,7 @@ export default function EmployeeManager({
                       `${e.employee.name} ${e.employee.surname}`,
                     )
                   }
-                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  className="p-1.5 text-muted-foreground/70 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                   title="Oturum Geçmişi"
                 >
                   <Clock className="w-4 h-4" />
@@ -426,7 +426,7 @@ export default function EmployeeManager({
                   type="button"
                   data-ocid={`emp_manager.delete_button.${i + 1}`}
                   onClick={() => setConfirmRemoveId(e.employee.employeeId)}
-                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  className="p-1.5 text-muted-foreground/70 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                   title="Şirketten çıkar"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -443,7 +443,7 @@ export default function EmployeeManager({
           data-ocid="emp_manager.dialog"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
         >
-          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+          <div className="bg-card rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
                 <AlertTriangle className="w-5 h-5 text-red-500" />

@@ -290,7 +290,7 @@ export default function VisitorRegisterForm({
         <div>
           <label
             htmlFor="vf-name"
-            className="block text-xs font-medium text-slate-600 mb-1"
+            className="block text-xs font-medium text-foreground/70 mb-1"
           >
             Ad *
           </label>
@@ -300,13 +300,13 @@ export default function VisitorRegisterForm({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Ad"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card text-foreground"
           />
         </div>
         <div>
           <label
             htmlFor="vf-surname"
-            className="block text-xs font-medium text-slate-600 mb-1"
+            className="block text-xs font-medium text-foreground/70 mb-1"
           >
             Soyad *
           </label>
@@ -316,7 +316,7 @@ export default function VisitorRegisterForm({
             value={surname}
             onChange={(e) => setSurname(e.target.value)}
             placeholder="Soyad"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card text-foreground"
           />
         </div>
       </div>
@@ -325,7 +325,7 @@ export default function VisitorRegisterForm({
         <div>
           <label
             htmlFor="vf-tc"
-            className="block text-xs font-medium text-slate-600 mb-1"
+            className="block text-xs font-medium text-foreground/70 mb-1"
           >
             TC Kimlik No
           </label>
@@ -339,7 +339,7 @@ export default function VisitorRegisterForm({
             className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 font-mono ${
               isBlacklisted
                 ? "border-red-400 focus:ring-red-400 bg-red-50"
-                : "border-slate-300 focus:ring-emerald-500"
+                : "border-border focus:ring-ring bg-card text-foreground"
             }`}
           />
           {isBlacklisted && (
@@ -390,7 +390,7 @@ export default function VisitorRegisterForm({
         <div>
           <label
             htmlFor="vf-phone"
-            className="block text-xs font-medium text-slate-600 mb-1"
+            className="block text-xs font-medium text-foreground/70 mb-1"
           >
             Telefon *
           </label>
@@ -400,7 +400,7 @@ export default function VisitorRegisterForm({
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="Telefon"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card text-foreground"
           />
         </div>
       </div>
@@ -409,7 +409,7 @@ export default function VisitorRegisterForm({
         <div>
           <label
             htmlFor="vf-plate"
-            className="block text-xs font-medium text-slate-600 mb-1"
+            className="block text-xs font-medium text-foreground/70 mb-1"
           >
             Araç Plakası
           </label>
@@ -419,13 +419,13 @@ export default function VisitorRegisterForm({
             value={vehiclePlate}
             onChange={(e) => setVehiclePlate(e.target.value.toUpperCase())}
             placeholder="34 ABC 123"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono tracking-wider"
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono tracking-wider"
           />
         </div>
         <div>
           <label
             htmlFor="vf-visiting"
-            className="block text-xs font-medium text-slate-600 mb-1"
+            className="block text-xs font-medium text-foreground/70 mb-1"
           >
             Kime Geldi *
           </label>
@@ -435,7 +435,7 @@ export default function VisitorRegisterForm({
             value={visitingPerson}
             onChange={(e) => setVisitingPerson(e.target.value)}
             placeholder="Ziyaret edilecek kişi"
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card text-foreground"
           />
         </div>
       </div>
@@ -444,7 +444,7 @@ export default function VisitorRegisterForm({
       <div>
         <label
           htmlFor="vf-visitor-type"
-          className="block text-xs font-medium text-slate-600 mb-1"
+          className="block text-xs font-medium text-foreground/70 mb-1"
         >
           Ziyaretçi Tipi *
         </label>
@@ -453,7 +453,7 @@ export default function VisitorRegisterForm({
           data-ocid="visitor_register.visitor_type_select"
           value={visitorType}
           onChange={(e) => setVisitorType(e.target.value)}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card"
         >
           <option value="">Seçiniz...</option>
           {VISITOR_TYPES.map((t) => (
@@ -468,7 +468,7 @@ export default function VisitorRegisterForm({
       <div>
         <label
           htmlFor="vf-purpose"
-          className="block text-xs font-medium text-slate-600 mb-1"
+          className="block text-xs font-medium text-foreground/70 mb-1"
         >
           Ziyaret Amacı *
         </label>
@@ -477,7 +477,7 @@ export default function VisitorRegisterForm({
           data-ocid="visitor_form.purpose.select"
           value={visitPurposeType}
           onChange={(e) => setVisitPurposeType(e.target.value)}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card"
         >
           <option value="">Seçiniz...</option>
           {PURPOSE_OPTIONS.map((opt) => (
@@ -492,7 +492,7 @@ export default function VisitorRegisterForm({
             value={visitPurposeCustom}
             onChange={(e) => setVisitPurposeCustom(e.target.value)}
             placeholder="Ziyaret amacını belirtin"
-            className="mt-2 w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="mt-2 w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card text-foreground"
           />
         )}
       </div>
@@ -502,7 +502,7 @@ export default function VisitorRegisterForm({
         <div>
           <label
             htmlFor="vf-zone"
-            className="block text-xs font-medium text-slate-600 mb-1"
+            className="block text-xs font-medium text-foreground/70 mb-1"
           >
             Erişim Bölgesi
           </label>
@@ -511,7 +511,7 @@ export default function VisitorRegisterForm({
             data-ocid="visitor_form.zone.select"
             value={selectedZone}
             onChange={(e) => setSelectedZone(e.target.value)}
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card"
           >
             <option value="">Seçiniz (İsteğe bağlı)</option>
             {availableZones.map((z) => (
@@ -525,14 +525,14 @@ export default function VisitorRegisterForm({
 
       <div>
         <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-medium text-slate-600">
+          <span className="text-xs font-medium text-foreground/70">
             Ziyaretçi İmzası
           </span>
           <button
             type="button"
             data-ocid="visitor_form.clear_sig.button"
             onClick={clearSignature}
-            className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+            className="text-xs text-muted-foreground/70 hover:text-red-500 transition-colors"
           >
             Temizle
           </button>
@@ -542,7 +542,7 @@ export default function VisitorRegisterForm({
           ref={canvasRef}
           width={600}
           height={150}
-          className="signature-canvas w-full h-32 border-2 border-dashed border-slate-300 rounded-lg bg-slate-50"
+          className="signature-canvas w-full h-32 border-2 border-dashed border-border rounded-lg bg-muted/30"
           onMouseDown={startDraw}
           onMouseMove={draw}
           onMouseUp={stopDraw}
@@ -552,7 +552,7 @@ export default function VisitorRegisterForm({
           onTouchEnd={stopDraw}
         />
         {!hasSig && (
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-muted-foreground/70 mt-1">
             Ziyaretçi parmağı veya fare ile imzalayabilir
           </p>
         )}
@@ -562,18 +562,18 @@ export default function VisitorRegisterForm({
       <CompanionManager companions={companions} onChange={setCompanions} />
 
       {/* NDA Checkbox */}
-      <div className="flex items-start gap-3 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
+      <div className="flex items-start gap-3 bg-muted/30 border border-border rounded-lg px-4 py-3">
         <input
           type="checkbox"
           id="vf-nda"
           data-ocid="visitor_register.nda_checkbox"
           checked={ndaAccepted}
           onChange={(e) => setNdaAccepted(e.target.checked)}
-          className="mt-0.5 h-4 w-4 rounded border-slate-300 accent-emerald-600 cursor-pointer flex-shrink-0"
+          className="mt-0.5 h-4 w-4 rounded border-border accent-primary cursor-pointer flex-shrink-0"
         />
         <label
           htmlFor="vf-nda"
-          className="text-xs text-slate-600 leading-relaxed cursor-pointer"
+          className="text-xs text-foreground/70 leading-relaxed cursor-pointer"
         >
           Ziyaretçi, şirket gizlilik ve güvenlik kurallarını okuduğunu ve kabul
           ettiğini onaylamaktadır.

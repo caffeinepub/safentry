@@ -195,7 +195,7 @@ export default function DocumentVerify({ onNavigate }: Props) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="bg-white border-b border-border px-4 py-3 flex items-center gap-3">
+      <header className="bg-card border-b border-border px-4 py-3 flex items-center gap-3">
         <button
           type="button"
           data-ocid="doc_verify.back.button"
@@ -237,7 +237,7 @@ export default function DocumentVerify({ onNavigate }: Props) {
 
           <form
             onSubmit={handleVerify}
-            className="bg-white rounded-2xl shadow-card border border-border p-6 space-y-4"
+            className="bg-card rounded-2xl shadow-card border border-border p-6 space-y-4"
           >
             <div className="space-y-1.5">
               <label
@@ -252,7 +252,7 @@ export default function DocumentVerify({ onNavigate }: Props) {
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="Belge kodunu girin"
-                className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono bg-white text-foreground placeholder:text-muted-foreground"
+                className="w-full border border-input rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring font-mono bg-card text-foreground placeholder:text-muted-foreground"
               />
             </div>
 
@@ -283,7 +283,7 @@ export default function DocumentVerify({ onNavigate }: Props) {
           {result === "notfound" && (
             <div
               data-ocid="doc_verify.error_state"
-              className="mt-4 bg-red-50 border border-red-200 rounded-2xl p-5 text-center animate-fade-in"
+              className="mt-4 bg-red-500/15 border border-red-500/30 rounded-2xl p-5 text-center animate-fade-in"
             >
               <XCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
               <p className="font-display font-semibold text-red-700">
@@ -313,8 +313,8 @@ export default function DocumentVerify({ onNavigate }: Props) {
                     Aktif Ziyaret
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 border border-gray-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-muted/40 text-muted-foreground border border-border">
+                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
                     Tamamlandı
                   </span>
                 )}
@@ -372,7 +372,7 @@ export default function DocumentVerify({ onNavigate }: Props) {
             type="button"
             data-ocid="doc_verify.qr_overlay.close_button"
             onClick={closeQrOverlay}
-            className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors"
+            className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-card/20 hover:bg-card/30 flex items-center justify-center text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -410,7 +410,7 @@ export default function DocumentVerify({ onNavigate }: Props) {
               <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-lg" />
               {/* Scan line animation */}
               <div
-                className="absolute left-2 right-2 h-0.5 bg-white/60"
+                className="absolute left-2 right-2 h-0.5 bg-card/60"
                 style={{ animation: "qr-scan 2s linear infinite", top: "20%" }}
               />
             </div>

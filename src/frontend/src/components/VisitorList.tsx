@@ -218,14 +218,14 @@ export default function VisitorList({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Ad, TC veya telefon ile ara..."
-              className="w-full pl-9 pr-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white text-foreground placeholder:text-muted-foreground"
+              className="w-full pl-9 pr-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card text-foreground placeholder:text-muted-foreground"
             />
           </div>
           <select
             data-ocid="visitor_list.filter.select"
             value={filter}
             onChange={(e) => setFilter(e.target.value as typeof filter)}
-            className="border border-border rounded-lg px-3 py-2 text-sm focus:outline-none bg-white text-foreground"
+            className="border border-border rounded-lg px-3 py-2 text-sm focus:outline-none bg-card text-foreground"
           >
             <option value="all">Tümü</option>
             <option value="active">Aktif</option>
@@ -239,7 +239,7 @@ export default function VisitorList({
             className={`p-2 rounded-lg border transition-colors ${
               showDateFilter || dateFrom || dateTo
                 ? "border-primary/40 bg-primary/5 text-primary"
-                : "border-border bg-white text-muted-foreground hover:text-foreground"
+                : "border-border bg-card text-muted-foreground hover:text-foreground"
             }`}
           >
             <CalendarRange className="w-4 h-4" />
@@ -250,7 +250,7 @@ export default function VisitorList({
             onClick={handleExport}
             title="CSV olarak dışa aktar"
             disabled={filtered.length === 0}
-            className="p-2 rounded-lg border border-border bg-white text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="p-2 rounded-lg border border-border bg-card text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Download className="w-4 h-4" />
           </button>
@@ -266,7 +266,7 @@ export default function VisitorList({
               data-ocid="visitor_list.employee_filter.select"
               value={selectedEmployeeId}
               onChange={(e) => setSelectedEmployeeId(e.target.value)}
-              className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none bg-white text-foreground"
+              className="flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none bg-card text-foreground"
             >
               <option value="all">Tüm Personel</option>
               {employees.map((emp) => (
@@ -297,7 +297,7 @@ export default function VisitorList({
               data-ocid="visitor_list.date_from.input"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="flex-1 border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white"
+              className="flex-1 border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card"
             />
             <span className="text-xs text-muted-foreground">-</span>
             <input
@@ -305,7 +305,7 @@ export default function VisitorList({
               data-ocid="visitor_list.date_to.input"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="flex-1 border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-white"
+              className="flex-1 border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring bg-card"
             />
             {(dateFrom || dateTo) && (
               <button
@@ -373,7 +373,7 @@ export default function VisitorList({
               key={v.visitorId}
               data-ocid={`visitor_list.item.${i + 1}`}
               onClick={() => setDetailVisitorId(v.visitorId)}
-              className="w-full text-left bg-white border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-card transition-all cursor-pointer"
+              className="w-full text-left bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-card transition-all cursor-pointer"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">

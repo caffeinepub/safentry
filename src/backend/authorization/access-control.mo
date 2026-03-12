@@ -1,28 +1,39 @@
 import Map "mo:core/Map";
-import Runtime "mo:core/Runtime";
 import Principal "mo:core/Principal";
+import Runtime "mo:core/Runtime";
 
 module {
-  public type UserRole = { #admin; #user; #guest };
+  public type UserRole = {
+    #admin;
+    #user;
+    #guest;
+  };
 
   public type AccessControlState = {
-    userRoles : Map.Map<Principal, UserRole>;
     var adminAssigned : Bool;
+    userRoles : Map.Map<Principal, UserRole>;
   };
 
   public func initState() : AccessControlState {
     {
-      userRoles = Map.empty<Principal, UserRole>();
       var adminAssigned = false;
+      userRoles = Map.empty<Principal, UserRole>();
     };
   };
 
+  // First principal that calls this function becomes admin, all other principals become users.
   public func initialize(state : AccessControlState, caller : Principal, adminToken : Text, userProvidedToken : Text) {
-    if (not state.adminAssigned and userProvidedToken == adminToken) {
-      state.userRoles.add(caller, #admin);
-      state.adminAssigned := true;
-    } else {
-      state.userRoles.add(caller, #user);
+    if (caller.isAnonymous()) { return };
+    switch (state.userRoles.get(caller)) {
+      case (?_) {};
+      case (null) {
+        if (not state.adminAssigned and userProvidedToken == adminToken) {
+          state.userRoles.add(caller, #admin);
+          state.adminAssigned := true;
+        } else {
+          state.userRoles.add(caller, #user);
+        };
+      };
     };
   };
 
@@ -31,9 +42,7 @@ module {
     switch (state.userRoles.get(caller)) {
       case (?role) { role };
       case (null) {
-        // Unknown (unregistered) principals are treated as guests
-        // so that public endpoints like registerCompany work correctly
-        #guest
+        Runtime.trap("User is not registered");
       };
     };
   };

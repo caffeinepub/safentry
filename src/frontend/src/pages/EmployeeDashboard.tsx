@@ -1672,7 +1672,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                                 > = {
                                   pending: {
                                     label: "⏳ Onay Bekliyor",
-                                    cls: "text-amber-600 bg-amber-50 border-amber-200",
+                                    cls: "text-amber-400 bg-amber-500/15 border-amber-500/40",
                                   },
                                   approved: {
                                     label: "✓ Onaylandı",
@@ -1680,7 +1680,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                                   },
                                   rejected: {
                                     label: "✗ Reddedildi",
-                                    cls: "text-red-700 bg-red-50 border-red-200",
+                                    cls: "text-red-400 bg-red-500/15 border-red-500/30",
                                   },
                                 };
                                 const cfg = statusConfig[status];
@@ -1699,7 +1699,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                                 );
                                 if (!zone) return null;
                                 return (
-                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-medium bg-blue-50 text-blue-700 border-blue-200">
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-medium bg-blue-500/15 text-blue-400 border-blue-500/30">
                                     <MapPin className="w-2.5 h-2.5" /> {zone}
                                   </span>
                                 );
@@ -2052,7 +2052,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
               {csvResult && (
                 <div
                   data-ocid="csv_upload.success_state"
-                  className={`text-xs font-medium px-3 py-2 rounded-xl ${csvResult.failed === 0 ? "bg-emerald-50 text-emerald-700 border border-primary/30" : "bg-amber-50 text-amber-800 border border-amber-200"}`}
+                  className={`text-xs font-medium px-3 py-2 rounded-xl ${csvResult.failed === 0 ? "bg-primary/10 text-primary border border-primary/30" : "bg-amber-500/15 text-amber-400 border border-amber-500/40"}`}
                 >
                   ✓ {csvResult.success} başarılı
                   {csvResult.failed > 0 ? `, ${csvResult.failed} hatalı` : ""}
@@ -2119,7 +2119,7 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                       > = {
                         BLACKLIST_ADD: {
                           label: "Kara Liste Eklendi",
-                          cls: "bg-red-50 text-red-700 border border-red-200",
+                          cls: "bg-red-500/15 text-red-400 border border-red-500/30",
                         },
                         BLACKLIST_REMOVE: {
                           label: "Kara Listeden Çıkarıldı",
@@ -2127,11 +2127,11 @@ export default function EmployeeDashboard({ onNavigate }: Props) {
                         },
                         EMPLOYEE_REMOVED: {
                           label: "Personel Çıkarıldı",
-                          cls: "bg-red-50 text-red-700 border border-red-200",
+                          cls: "bg-red-500/15 text-red-400 border border-red-500/30",
                         },
                         VISITOR_CHECKOUT: {
                           label: "Çıkış Yapıldı",
-                          cls: "bg-emerald-50 text-emerald-700 border border-primary/30",
+                          cls: "bg-primary/10 text-primary border border-primary/30",
                         },
                       };
                       const action = actionMap[log.action] || {
@@ -3328,7 +3328,7 @@ function InviteStatusBadge({ status }: { status: PreRegistration["status"] }) {
     );
   if (status === "finalized")
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-primary/30">
+      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/30">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
         Tamamlandı
       </span>

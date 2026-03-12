@@ -75,7 +75,7 @@ export default function VisitorDocument({
     return (
       <div
         data-ocid="visitor_doc.loading_state"
-        className="text-center py-8 text-slate-400 text-sm"
+        className="text-center py-8 text-muted-foreground/70 text-sm"
       >
         Yükleniyor...
       </div>
@@ -83,9 +83,9 @@ export default function VisitorDocument({
   if (!visitor) return null;
 
   return (
-    <div className="bg-white rounded-xl border shadow-sm">
+    <div className="bg-card rounded-xl border shadow-sm">
       <div className="flex items-center justify-between p-4 border-b no-print">
-        <h3 className="font-semibold text-slate-800">Ziyaretçi Belgesi</h3>
+        <h3 className="font-semibold text-foreground">Ziyaretçi Belgesi</h3>
         <div className="flex gap-2">
           <button
             type="button"
@@ -100,7 +100,7 @@ export default function VisitorDocument({
             type="button"
             data-ocid="visitor_doc.close.button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+            className="p-1.5 text-muted-foreground/70 hover:text-foreground/70 rounded-lg hover:bg-muted/40"
           >
             <X className="w-4 h-4" />
           </button>
@@ -118,13 +118,15 @@ export default function VisitorDocument({
               />
             )}
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">SAFENTRY</h1>
-              <p className="text-xs text-slate-500">Ziyaretçi Giriş Belgesi</p>
+              <h1 className="text-2xl font-bold text-foreground">SAFENTRY</h1>
+              <p className="text-xs text-muted-foreground">
+                Ziyaretçi Giriş Belgesi
+              </p>
             </div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-slate-500">Belge Kodu</div>
-            <div className="font-mono font-bold text-slate-800">
+            <div className="text-xs text-muted-foreground">Belge Kodu</div>
+            <div className="font-mono font-bold text-foreground">
               {visitor.documentCode}
             </div>
           </div>
@@ -155,13 +157,13 @@ export default function VisitorDocument({
 
             {visitor.signatureData && (
               <div>
-                <div className="text-xs font-medium text-slate-500 mb-1">
+                <div className="text-xs font-medium text-muted-foreground mb-1">
                   ZİYARETÇİ İMZASI
                 </div>
                 <img
                   src={visitor.signatureData}
                   alt="Ziyaretçi imzası"
-                  className="h-16 border border-slate-200 rounded bg-slate-50"
+                  className="h-16 border border-border rounded bg-muted/30"
                 />
               </div>
             )}
@@ -169,14 +171,14 @@ export default function VisitorDocument({
 
           <div className="flex flex-col items-center gap-2">
             <QRCodeDocument value={visitor.documentCode} size={120} />
-            <div className="text-xs text-slate-400 text-center">
+            <div className="text-xs text-muted-foreground/70 text-center">
               QR ile doğrulayın
             </div>
           </div>
         </div>
 
         <div className="mt-6 pt-4 border-t">
-          <p className="text-xs text-slate-400 text-center">
+          <p className="text-xs text-muted-foreground/70 text-center">
             Bu belge Safentry sistemi üzerinden oluşturulmuştur.
           </p>
         </div>
@@ -191,7 +193,7 @@ function Section({
 }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
         {title}
       </div>
       <div className="space-y-1">{children}</div>
@@ -202,10 +204,10 @@ function Section({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-2">
-      <span className="text-xs text-slate-500 w-28 flex-shrink-0">
+      <span className="text-xs text-muted-foreground w-28 flex-shrink-0">
         {label}:
       </span>
-      <span className="text-sm text-slate-800 font-medium">{value}</span>
+      <span className="text-sm text-foreground font-medium">{value}</span>
     </div>
   );
 }

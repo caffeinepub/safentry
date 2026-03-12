@@ -34,7 +34,7 @@ export default function PurposeDistributionChart({ data }: Props) {
   return (
     <div
       data-ocid="company_dash.purpose_chart.section"
-      className="bg-white border border-border rounded-2xl p-5"
+      className="bg-card border border-border rounded-2xl p-5"
     >
       <div className="flex items-center gap-2 mb-5">
         <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center">

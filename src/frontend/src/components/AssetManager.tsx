@@ -103,7 +103,7 @@ export default function AssetManager({
       data-ocid="asset_manager.dialog"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
     >
-      <div className="bg-white rounded-2xl shadow-xl p-5 max-w-md w-full mx-4 space-y-4 max-h-[85vh] overflow-y-auto">
+      <div className="bg-card rounded-2xl shadow-xl p-5 max-w-md w-full mx-4 space-y-4 max-h-[85vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -130,8 +130,8 @@ export default function AssetManager({
         </div>
 
         {/* Add new item */}
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
-          <p className="text-xs font-semibold text-slate-700">
+        <div className="bg-muted/30 border border-border rounded-xl p-3 space-y-2">
+          <p className="text-xs font-semibold text-foreground/80">
             Yeni Zimmet Ekle
           </p>
           <div className="flex gap-2">
@@ -147,7 +147,7 @@ export default function AssetManager({
                 }
               }}
               placeholder="Eşya adı (rozet, anahtar, kart...)"
-              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+              className="flex-1 border border-border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 bg-card"
             />
             <input
               type="number"
@@ -155,7 +155,7 @@ export default function AssetManager({
               max={99}
               value={newQty}
               onChange={(e) => setNewQty(Math.max(1, Number(e.target.value)))}
-              className="w-14 border border-slate-300 rounded-lg px-2 py-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
+              className="w-14 border border-border rounded-lg px-2 py-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-primary/30 bg-card"
             />
           </div>
           <button

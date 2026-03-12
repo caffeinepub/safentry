@@ -93,7 +93,7 @@ export default function InviteForm() {
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl border border-border shadow-md overflow-hidden">
+        <div className="bg-card rounded-2xl border border-border shadow-md overflow-hidden">
           {loading && (
             <div
               data-ocid="invite_form.loading_state"
@@ -207,7 +207,7 @@ export default function InviteForm() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Adınız"
-                      className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 bg-white"
+                      className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary bg-card"
                     />
                   </div>
                   <div>
@@ -223,7 +223,7 @@ export default function InviteForm() {
                       value={surname}
                       onChange={(e) => setSurname(e.target.value)}
                       placeholder="Soyadınız"
-                      className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 bg-white"
+                      className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary bg-card"
                     />
                   </div>
                 </div>
@@ -244,7 +244,7 @@ export default function InviteForm() {
                     placeholder="11 haneli TC kimlik numaranız"
                     maxLength={11}
                     inputMode="numeric"
-                    className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 bg-white font-mono"
+                    className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary bg-card font-mono"
                   />
                 </div>
                 <div>
@@ -261,7 +261,7 @@ export default function InviteForm() {
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="Telefon numaranız"
                     type="tel"
-                    className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 bg-white"
+                    className="w-full px-3 py-2.5 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary bg-card"
                   />
                 </div>
 
